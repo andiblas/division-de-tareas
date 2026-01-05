@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Chore Allocation - Home{% endblock %}
+
+{% block content %}
+<form id="allocation-form" action="{{ url_for('main.calculate') }}" method="post">
+    <div class="form-container">
+        <!-- Agents Section -->
+        <section class="list-section">
+            <h2>Agents</h2>
+            <p class="section-description">Add the people who will share the chores</p>
+
+            <div class="add-item-row">
+                <input
+                    type="text"
+                    id="agent-input"
+                    placeholder="Enter agent name"
+                    autocomplete="off"
+                >
+                <button type="button" onclick="addAgent()">Add Agent</button>
+            </div>
+
+            <ul id="agents-list" class="item-list">
+                {% for agent in agents %}
+                <li>
+                    <span>{{ agent }}</span>
+                    <input type="hidden" name="agents" value="{{ agent }}">
+                    <button type="button" class="remove-btn" onclick="removeItem(this)">Remove</button>
+                </li>
+                {% endfor %}
+            </ul>
+
+            <p id="agents-empty" class="empty-message" {% if agents %}style="display: none;"{% endif %}>
+                No agents added yet
+            </p>
+        </section>
+
+        <!-- Chores Section -->
+        <section class="list-section">
+            <h2>Chores</h2>
+            <p class="section-description">Add the tasks to be distributed</p>
+
+            <div class="add-item-row">
+                <input
+                    type="text"
+                    id="chore-input"
+                    placeholder="Enter chore name"
+                    autocomplete="off"
+                >
+                <button type="button" onclick="addChore()">Add Chore</button>
+            </div>
+
+            <ul id="chores-list" class="item-list">
+                {% for chore in chores %}
+                <li>
+                    <span>{{ chore }}</span>
+                    <input type="hidden" name="chores" value="{{ chore }}">
+                    <button type="button" class="remove-btn" onclick="removeItem(this)">Remove</button>
+                </li>
+                {% endfor %}
+            </ul>
+
+            <p id="chores-empty" class="empty-message" {% if chores %}style="display: none;"{% endif %}>
+                No chores added yet
+            </p>
+        </section>
+    </div>
+
+    <!-- Submit Button -->
+    <div class="submit-section">
+        <button type="submit" class="submit-btn">Calculate Allocation</button>
+    </div>
+</form>
+
+<!-- Result Section -->
+{% if result %}
+<section class="result-section">
+    <h2>Result</h2>
+    <div class="result-content">
+        <p><strong>Status:</strong> {{ result.status }}</p>
+        <p>{{ result.message }}</p>
+        <p>Agents received: {{ result.agents_count }}</p>
+        <p>Chores received: {{ result.chores_count }}</p>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
