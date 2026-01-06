@@ -11,8 +11,8 @@ class Config:
     # In production, set this via environment variable
     SECRET_KEY: str = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
-    # Web API URL (the allocation calculator API)
-    API_BASE_URL: str = os.environ.get("API_BASE_URL", "http://localhost:8000")
+    # Allocation Calculator URL (R/Plumber API)
+    CALCULATOR_URL: str = os.environ.get("CALCULATOR_URL", "http://localhost:8000")
 
 
 class DevelopmentConfig(Config):

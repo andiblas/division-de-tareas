@@ -1,6 +1,7 @@
 """Main routes for the chore allocation application."""
 
-from flask import Blueprint, render_template, request
+import requests
+from flask import Blueprint, current_app, render_template, request
 
 # Create the main blueprint
 main_bp = Blueprint("main", __name__)
@@ -47,13 +48,44 @@ def calculate() -> str:
         }
         return render_template("index.html", agents=agents, chores=chores, result=result)
 
-    # TODO: Forward to Web API when it's implemented
-    # For now, just echo back the input
-    result = {
-        "status": "pending",
-        "message": "Web API integration coming soon. Received your input.",
-        "agents_count": len(agents),
-        "chores_count": len(chores),
-    }
+    # Forward to Allocation Calculator API
+    api_url = current_app.config["CALCULATOR_URL"] + "/allocate"
+    try:
+        response = requests.post(
+            api_url,
+            json={"agents": agents, "chores": chores},
+            timeout=30,
+        )
+        response.raise_for_status()
+        api_result = response.json()
+
+        result = {
+            "status": api_result.get("status", "unknown"),
+            "message": api_result.get("message", ""),
+            "agents_count": len(agents),
+            "chores_count": len(chores),
+            "api_response": api_result,
+        }
+    except requests.exceptions.ConnectionError:
+        result = {
+            "status": "error",
+            "message": "Could not connect to Allocation Calculator. Is it running?",
+            "agents_count": len(agents),
+            "chores_count": len(chores),
+        }
+    except requests.exceptions.Timeout:
+        result = {
+            "status": "error",
+            "message": "Allocation Calculator request timed out.",
+            "agents_count": len(agents),
+            "chores_count": len(chores),
+        }
+    except requests.exceptions.RequestException as e:
+        result = {
+            "status": "error",
+            "message": f"API error: {e}",
+            "agents_count": len(agents),
+            "chores_count": len(chores),
+        }
 
     return render_template("index.html", agents=agents, chores=chores, result=result)
