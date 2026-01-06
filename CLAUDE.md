@@ -8,14 +8,13 @@ This is a chore allocation platform that finds the most fair distribution of cho
 
 ## Architecture
 
-The system consists of three layers communicating via HTTP:
+The system consists of two layers communicating via HTTP:
 
 ```
-Web App (Flask/Python) → Web API (Flask/Python) → Allocation Calculator (R/Plumber)
+Web App (Flask/Python) → Allocation Calculator (R/Plumber)
 ```
 
 - **Web App**: Presentation layer for gathering problem instances (agents, chores, value functions)
-- **Web API**: Middleware that selects allocation algorithms based on input size, parses data, and coordinates with the calculator
 - **Allocation Calculator**: R-based computation layer with multiple allocation strategies, exposed via Plumber HTTP API
 
 ## Technology Stack

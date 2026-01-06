@@ -3,21 +3,17 @@ The allocation of chores platform will be in charge of finding the best allocati
 
 # Architecture
 ```
-Web app (Flask) -----> Web API (Flask) <-----> Allocation calculator (R + Plumber)
+Web app (Flask) <-----> Allocation calculator (R + Plumber)
 ```
 
 ### Web app
 This is the presentation layer that will be in charge of gathering the input for an instance.
 Instance: is a set of variables that represent a problem. Agents, chores and their value functions.
-Programmed in Python, with Flask.
-
-### Web API
-Web API will be in charge of receiving the input from the presentation layer and processing the problem.
+The Web APP will be in charge of receiving the input from the presentation layer and processing the problem.
 The main tasks on this layer will be:
 1. Receiving the input and determine which is the best allocation algorithm to pick depending on simple criteria; input's size.
 2. Parsing that input and send it over to the Allocation calculator layer. This will be done via HTTP.
-3. Waiting for the Allocation calculator's response, parse it and return it to the Web app.
-
+3. Waiting for the Allocation calculator's response, parse it and render the results.
 Programmed in Python, with Flask.
 
 ### Allocation calculator
