@@ -4,72 +4,91 @@
 
 {% block content %}
 <form id="allocation-form" action="{{ url_for('main.calculate') }}" method="post">
-    <div class="form-container">
-        <!-- Agents Section -->
-        <section class="list-section">
-            <h2>Agents</h2>
-            <p class="section-description">Add the people who will share the chores</p>
-
-            <div class="add-item-row">
-                <input
-                    type="text"
-                    id="agent-input"
-                    placeholder="Enter agent name"
-                    autocomplete="off"
-                >
-                <button type="button" onclick="addAgent()">Add Agent</button>
-            </div>
-
-            <ul id="agents-list" class="item-list">
-                {% for agent in agents %}
-                <li>
-                    <span>{{ agent }}</span>
-                    <input type="hidden" name="agents" value="{{ agent }}">
-                    <button type="button" class="remove-btn" onclick="removeItem(this)">Remove</button>
-                </li>
-                {% endfor %}
-            </ul>
-
-            <p id="agents-empty" class="empty-message" {% if agents %}style="display: none;"{% endif %}>
-                No agents added yet
-            </p>
-        </section>
-
-        <!-- Chores Section -->
-        <section class="list-section">
-            <h2>Chores</h2>
-            <p class="section-description">Add the tasks to be distributed</p>
-
-            <div class="add-item-row">
-                <input
-                    type="text"
-                    id="chore-input"
-                    placeholder="Enter chore name"
-                    autocomplete="off"
-                >
-                <button type="button" onclick="addChore()">Add Chore</button>
-            </div>
-
-            <ul id="chores-list" class="item-list">
-                {% for chore in chores %}
-                <li>
-                    <span>{{ chore }}</span>
-                    <input type="hidden" name="chores" value="{{ chore }}">
-                    <button type="button" class="remove-btn" onclick="removeItem(this)">Remove</button>
-                </li>
-                {% endfor %}
-            </ul>
-
-            <p id="chores-empty" class="empty-message" {% if chores %}style="display: none;"{% endif %}>
-                No chores added yet
-            </p>
-        </section>
+    <!-- Progress Indicator -->
+    <div class="progress-indicator">
+        <span id="step-label" class="step-label">Step 1 of 1</span>
+        <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill" style="width: 100%;"></div>
+        </div>
     </div>
 
-    <!-- Submit Button -->
-    <div class="submit-section">
-        <button type="submit" class="submit-btn">Calculate Allocation</button>
+    <!-- Step 1: Add Agents and Chores -->
+    <div id="step-1" class="step active">
+        <div class="form-container">
+            <!-- Agents Section -->
+            <section class="list-section">
+                <h2>Agents</h2>
+                <p class="section-description">Add the people who will share the chores</p>
+
+                <div class="add-item-row">
+                    <input
+                        type="text"
+                        id="agent-input"
+                        placeholder="Enter agent name"
+                        autocomplete="off"
+                    >
+                    <button type="button" onclick="addAgent()">Add Agent</button>
+                </div>
+
+                <ul id="agents-list" class="item-list">
+                    {% for agent in agents %}
+                    <li>
+                        <span>{{ agent }}</span>
+                        <input type="hidden" name="agents" value="{{ agent }}">
+                        <button type="button" class="remove-btn" onclick="removeItem(this)">Remove</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p id="agents-empty" class="empty-message" {% if agents %}style="display: none;"{% endif %}>
+                    No agents added yet
+                </p>
+            </section>
+
+            <!-- Chores Section -->
+            <section class="list-section">
+                <h2>Chores</h2>
+                <p class="section-description">Add the tasks to be distributed</p>
+
+                <div class="add-item-row">
+                    <input
+                        type="text"
+                        id="chore-input"
+                        placeholder="Enter chore name"
+                        autocomplete="off"
+                    >
+                    <button type="button" onclick="addChore()">Add Chore</button>
+                </div>
+
+                <ul id="chores-list" class="item-list">
+                    {% for chore in chores %}
+                    <li>
+                        <span>{{ chore }}</span>
+                        <input type="hidden" name="chores" value="{{ chore }}">
+                        <button type="button" class="remove-btn" onclick="removeItem(this)">Remove</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <p id="chores-empty" class="empty-message" {% if chores %}style="display: none;"{% endif %}>
+                    No chores added yet
+                </p>
+            </section>
+        </div>
+
+        <!-- Next Button -->
+        <div class="nav-buttons nav-buttons--single">
+            <button type="button" id="btn-next-to-values" class="btn-next" onclick="goToDislikeValues()" disabled>
+                Next: Enter Dislike Values
+            </button>
+        </div>
     </div>
+
+    <!-- Container for dynamically generated agent dislike steps -->
+    <div id="dislike-steps-container"></div>
+
+    <!-- Hidden inputs for dislike values (populated by JS before submit) -->
+    <div id="dislike-hidden-inputs"></div>
 </form>
 
 <!-- Result Section -->
