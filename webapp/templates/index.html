@@ -4,16 +4,16 @@
 
 {% block content %}
 <form id="allocation-form" action="{{ url_for('main.calculate') }}" method="post">
-    <!-- Progress Indicator -->
-    <div class="progress-indicator">
+    <!-- Progress Indicator (hidden on step 1 and result screen) -->
+    <div id="progress-indicator" class="progress-indicator hidden">
         <span id="step-label" class="step-label">Step 1 of 1</span>
         <div class="progress-bar">
             <div id="progress-fill" class="progress-fill" style="width: 100%;"></div>
         </div>
     </div>
 
-    <!-- Step 1: Add Agents and Chores -->
-    <div id="step-1" class="step active">
+    <!-- Step 1: Add Agents and Chores (hidden when showing results) -->
+    <div id="step-1" class="step {% if not result %}active{% endif %}">
         <div class="form-container">
             <!-- Agents Section -->
             <section class="list-section">
@@ -91,16 +91,25 @@
     <div id="dislike-hidden-inputs"></div>
 </form>
 
-<!-- Result Section -->
+<!-- Result Screen (standalone, shown when results exist) -->
 {% if result %}
-<section class="result-section">
-    <h2>Result</h2>
-    <div class="result-content">
-        <p><strong>Status:</strong> {{ result.status }}</p>
-        <p>{{ result.message }}</p>
-        <p>Agents received: {{ result.agents_count }}</p>
-        <p>Chores received: {{ result.chores_count }}</p>
+<div id="result-screen" class="step active">
+    <section class="result-section">
+        <h2>Allocation Result</h2>
+        <div class="result-content">
+            <p class="result-status result-status--{{ result.status }}">
+                <strong>Status:</strong> {{ result.status }}
+            </p>
+            <p class="result-message">{{ result.message }}</p>
+            <div class="result-stats">
+                <p><strong>Agents:</strong> {{ result.agents_count }}</p>
+                <p><strong>Chores:</strong> {{ result.chores_count }}</p>
+            </div>
+        </div>
+    </section>
+    <div class="nav-buttons nav-buttons--single">
+        <a href="{{ url_for('main.index') }}" class="btn-next">Start Over</a>
     </div>
-</section>
+</div>
 {% endif %}
 {% endblock %}

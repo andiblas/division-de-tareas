@@ -147,17 +147,34 @@ function updateNextButton() {
 
 /**
  * Update the progress indicator.
+ * Hides on step 1, shows from step 2 onwards.
  */
 function updateProgressIndicator() {
+    const progressIndicator = document.getElementById('progress-indicator');
     const stepLabel = document.getElementById('step-label');
     const progressFill = document.getElementById('progress-fill');
 
+    // Hide progress indicator on step 1, show on other steps
+    if (progressIndicator) {
+        if (currentStep === 1) {
+            progressIndicator.classList.add('hidden');
+        } else {
+            progressIndicator.classList.remove('hidden');
+        }
+    }
+
     if (stepLabel) {
-        stepLabel.textContent = `Step ${currentStep} of ${totalSteps}`;
+        // Show step as "Step X of Y" but offset by 1 since step 1 doesn't count
+        const displayStep = currentStep - 1;
+        const displayTotal = totalSteps - 1;
+        stepLabel.textContent = `Step ${displayStep} of ${displayTotal}`;
     }
 
     if (progressFill) {
-        const percentage = (currentStep / totalSteps) * 100;
+        // Calculate percentage based on steps after step 1
+        const displayStep = currentStep - 1;
+        const displayTotal = totalSteps - 1;
+        const percentage = displayTotal > 0 ? (displayStep / displayTotal) * 100 : 100;
         progressFill.style.width = `${percentage}%`;
     }
 }
