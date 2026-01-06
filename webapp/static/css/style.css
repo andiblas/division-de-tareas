@@ -5,21 +5,35 @@
     padding: 0;
 }
 
+html {
+    height: 100%;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     line-height: 1.6;
     color: #333;
+    background-color: #f5f5f5;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+    width: 100%;
     max-width: 900px;
     margin: 0 auto;
-    padding: 20px;
-    background-color: #f5f5f5;
+    padding: 0 20px;
 }
 
 /* Header */
 header {
     text-align: center;
-    padding: 30px 0;
-    margin-bottom: 30px;
+    padding: 30px 20px;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 header h1 {
@@ -42,8 +56,30 @@ header .subtitle {
 
 /* Responsive: stack on mobile */
 @media (max-width: 600px) {
+    header {
+        padding: 20px 15px;
+    }
+
+    header h1 {
+        font-size: 1.6rem;
+    }
+
+    main {
+        padding: 0 15px;
+    }
+
     .form-container {
         grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .list-section {
+        padding: 20px;
+    }
+
+    .submit-btn {
+        width: 100%;
+        padding: 15px 20px;
     }
 }
 
@@ -171,29 +207,294 @@ header .subtitle {
     padding: 25px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
 }
 
 .result-section h2 {
     color: #2c3e50;
-    margin-bottom: 15px;
+    margin-bottom: 20px;
+    text-align: center;
 }
 
 .result-content {
     background: #f8f9fa;
-    padding: 20px;
+    padding: 25px;
+    border-radius: 6px;
+}
+
+.result-status {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    padding: 10px 15px;
     border-radius: 4px;
 }
 
-.result-content p {
-    margin-bottom: 8px;
+.result-status--success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.result-status--error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.result-message {
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+.result-stats {
+    display: flex;
+    gap: 30px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.result-stats p {
+    margin: 0;
+}
+
+/* Link styled as button */
+a.btn-next {
+    display: inline-block;
+    text-decoration: none;
+    text-align: center;
+    padding: 12px 28px;
+    background: #3498db;
+    color: white;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+a.btn-next:hover {
+    background: #2980b9;
 }
 
 /* Footer */
 footer {
-    margin-top: 50px;
-    padding-top: 20px;
+    margin-top: auto;
+    padding: 20px;
     border-top: 1px solid #ddd;
     text-align: center;
     color: #666;
     font-size: 14px;
+    width: 100%;
+}
+
+/* ===== Multi-step Form ===== */
+
+/* Step visibility */
+.step {
+    display: none;
+}
+
+.step.active {
+    display: block;
+}
+
+/* Progress indicator */
+.progress-indicator {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.progress-indicator.hidden {
+    display: none;
+}
+
+.step-label {
+    display: block;
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+}
+
+.progress-bar {
+    height: 6px;
+    background: #e0e0e0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #3498db;
+    width: 100%;
+    transition: width 0.3s ease;
+}
+
+/* Dislike section */
+.dislike-section {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+}
+
+.dislike-section h2 {
+    color: #2c3e50;
+    margin-bottom: 5px;
+    font-size: 1.3rem;
+}
+
+/* Scale hint */
+.scale-hint {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 15px;
+    padding: 0 5px;
+}
+
+/* Chore rating rows */
+.chore-ratings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chore-rating-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.chore-rating-row label {
+    min-width: 120px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.chore-rating-row input[type="range"] {
+    flex: 1;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #ddd;
+    border-radius: 4px;
+    outline: none;
+}
+
+.chore-rating-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    background: #3498db;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: background 0.2s;
+}
+
+.chore-rating-row input[type="range"]::-webkit-slider-thumb:hover {
+    background: #2980b9;
+}
+
+.chore-rating-row input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    background: #3498db;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-value {
+    min-width: 35px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    background: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+/* Navigation buttons */
+.nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    margin-top: 25px;
+}
+
+.nav-buttons button {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.btn-back {
+    background: #95a5a6;
+    color: white;
+}
+
+.btn-back:hover {
+    background: #7f8c8d;
+}
+
+.btn-next {
+    background: #3498db;
+    color: white;
+}
+
+.btn-next:hover {
+    background: #2980b9;
+}
+
+.btn-next:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+/* Single button alignment */
+.nav-buttons--single {
+    justify-content: center;
+}
+
+/* ===== Mobile adjustments for multi-step ===== */
+@media (max-width: 600px) {
+    .chore-rating-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .chore-rating-row label {
+        width: 100%;
+        min-width: auto;
+    }
+
+    .chore-rating-row input[type="range"] {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .nav-buttons {
+        flex-direction: column-reverse;
+        gap: 10px;
+    }
+
+    .nav-buttons button {
+        width: 100%;
+    }
+
+    .dislike-section {
+        padding: 20px;
+    }
 }

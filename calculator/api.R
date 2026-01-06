@@ -9,21 +9,24 @@ library(plumber)
 #* Calculate chore allocation
 #* @param agents List of agent names
 #* @param chores List of chore names
+#* @param dislike_values Nested list of dislike values per agent/chore
 #* @post /allocate
 function(req) {
   # Parse the JSON body
   body <- req$body
   agents <- body$agents
   chores <- body$chores
+  dislike_values <- body$dislike_values
 
   # Log received parameters
   message("=== Allocation Request Received ===")
   message("Agents: ", paste(agents, collapse = ", "))
   message("Chores: ", paste(chores, collapse = ", "))
+  message("Dislike values: ", jsonlite::toJSON(dislike_values, auto_unbox = TRUE))
   message("===================================")
 
   # For now, just echo back the parameters
-  # TODO: Implement actual allocation algorithm
+  # TODO: Implement actual allocation algorithm using dislike values
   list(
     status = "success",
     message = "Stub response - allocation algorithm not yet implemented",
@@ -31,7 +34,8 @@ function(req) {
       agents = agents,
       chores = chores,
       agents_count = length(agents),
-      chores_count = length(chores)
+      chores_count = length(chores),
+      dislike_values = dislike_values
     )
   )
 }

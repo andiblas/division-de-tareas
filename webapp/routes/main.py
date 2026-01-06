@@ -1,10 +1,41 @@
 """Main routes for the chore allocation application."""
 
+import re
+
 import requests
 from flask import Blueprint, current_app, render_template, request
 
 # Create the main blueprint
 main_bp = Blueprint("main", __name__)
+
+
+def parse_dislike_values(form: dict) -> dict[str, dict[str, int]]:
+    """Parse dislike_values from form data.
+
+    Form data comes as: dislike_values[agent][chore] = value
+    Returns a nested dict: {agent: {chore: value}}
+
+    Args:
+        form: The request form data
+
+    Returns:
+        Nested dictionary of dislike values
+    """
+    dislike_values: dict[str, dict[str, int]] = {}
+    pattern = re.compile(r"dislike_values\[(.+?)\]\[(.+?)\]")
+
+    for key in form:
+        match = pattern.match(key)
+        if match:
+            agent, chore = match.groups()
+            if agent not in dislike_values:
+                dislike_values[agent] = {}
+            try:
+                dislike_values[agent][chore] = int(form[key])
+            except ValueError:
+                dislike_values[agent][chore] = 5  # Default to neutral
+
+    return dislike_values
 
 
 @main_bp.route("/")
@@ -19,11 +50,12 @@ def index() -> str:
 
 @main_bp.route("/calculate", methods=["POST"])
 def calculate() -> str:
-    """Receive agents and chores lists, forward to Web API for allocation.
+    """Receive agents, chores, and dislike values, forward to API for allocation.
 
-    The form submits two lists:
+    The form submits:
     - agents: List of agent names (people)
     - chores: List of chore names (tasks)
+    - dislike_values[agent][chore]: Dislike rating (1-10) for each combination
 
     Returns:
         Rendered template with the allocation result (or error)
@@ -31,13 +63,16 @@ def calculate() -> str:
     # Get the lists from the form submission
     agents = request.form.getlist("agents")
     chores = request.form.getlist("chores")
+    dislike_values = parse_dislike_values(request.form)
 
-    # Validate that at least one agent and one chore exist
+    # Validate inputs
     errors = []
     if not agents:
         errors.append("At least one agent is required")
     if not chores:
         errors.append("At least one chore is required")
+    if not dislike_values:
+        errors.append("Dislike values are required")
 
     if errors:
         result = {
@@ -53,7 +88,11 @@ def calculate() -> str:
     try:
         response = requests.post(
             api_url,
-            json={"agents": agents, "chores": chores},
+            json={
+                "agents": agents,
+                "chores": chores,
+                "dislike_values": dislike_values,
+            },
             timeout=30,
         )
         response.raise_for_status()
