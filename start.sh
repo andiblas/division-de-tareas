@@ -21,6 +21,11 @@ source venv/bin/activate
 # Install dependencies if needed
 pip install -q -r requirements.txt
 
-# Run the server
-echo "Starting server at http://127.0.0.1:5001"
+# Start R allocation calculator in background
+echo "Starting R allocation calculator at http://127.0.0.1:8000"
+cd calculator && Rscript run.R &
+cd "$SCRIPT_DIR"
+
+# Run the Flask server
+echo "Starting Flask server at http://127.0.0.1:5001"
 python run.py
