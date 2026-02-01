@@ -326,8 +326,8 @@ footer {
     transition: width 0.3s ease;
 }
 
-/* Dislike section */
-.dislike-section {
+/* cost section */
+.cost-section {
     background: white;
     padding: 25px;
     border-radius: 8px;
@@ -335,7 +335,7 @@ footer {
     margin-bottom: 20px;
 }
 
-.dislike-section h2 {
+.cost-section h2 {
     color: #2c3e50;
     margin-bottom: 5px;
     font-size: 1.3rem;
@@ -494,7 +494,7 @@ footer {
         width: 100%;
     }
 
-    .dislike-section {
+    .cost-section {
         padding: 20px;
     }
 }

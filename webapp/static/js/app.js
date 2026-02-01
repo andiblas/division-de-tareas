@@ -1,6 +1,6 @@
 /**
  * Client-side JavaScript for managing the agents and chores lists,
- * and the multi-step dislike values flow.
+ * and the multi-step cost values flow.
  */
 
 // ===== State Management =====
@@ -185,7 +185,7 @@ function updateProgressIndicator() {
  */
 function goToStep(stepNum) {
     // Save current slider values before leaving
-    saveDislikeValuesToHiddenInputs();
+    saveCostValuesToHiddenInputs();
 
     // Hide all steps
     document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
@@ -204,9 +204,9 @@ function goToStep(stepNum) {
 }
 
 /**
- * Transition from step 1 to the dislike value steps.
+ * Transition from step 1 to the cost value steps.
  */
-function goToDislikeValues() {
+function goToCostValues() {
     const agents = getAgents();
     const chores = getChores();
 
@@ -215,8 +215,8 @@ function goToDislikeValues() {
         return;
     }
 
-    // Generate dislike value steps for each agent
-    generateDislikeSteps(agents, chores);
+    // Generate cost value steps for each agent
+    generateCostSteps(agents, chores);
 
     // Update total steps (step 1 + one step per agent)
     totalSteps = 1 + agents.length;
@@ -226,12 +226,12 @@ function goToDislikeValues() {
 }
 
 /**
- * Generate the HTML for each agent's dislike value form.
+ * Generate the HTML for each agent's cost value form.
  * @param {string[]} agents - Array of agent names
  * @param {string[]} chores - Array of chore names
  */
-function generateDislikeSteps(agents, chores) {
-    const container = document.getElementById('dislike-steps-container');
+function generateCostSteps(agents, chores) {
+    const container = document.getElementById('cost-steps-container');
     container.innerHTML = '';
 
     agents.forEach((agent, index) => {
@@ -274,10 +274,10 @@ function generateDislikeSteps(agents, chores) {
 
         const stepHtml = `
             <div id="step-${stepNum}" class="step">
-                <section class="dislike-section">
-                    <h2>${escapeHtml(agent)}'s Dislike Values</h2>
+                <section class="cost-section">
+                    <h2>${escapeHtml(agent)}'s Cost Values</h2>
                     <p class="section-description">
-                        Rate how much ${escapeHtml(agent)} dislikes each chore
+                        Please specify ${escapeHtml(agent)}'s cost value for each chore
                     </p>
                     <div class="scale-hint">
                         <span>1 = Don't mind</span>
@@ -311,15 +311,15 @@ function updateSliderValue(slider) {
 /**
  * Save all slider values to hidden inputs for form submission.
  */
-function saveDislikeValuesToHiddenInputs() {
-    const container = document.getElementById('dislike-hidden-inputs');
+function saveCostValuesToHiddenInputs() {
+    const container = document.getElementById('cost-hidden-inputs');
     const sliders = document.querySelectorAll('.chore-rating-row input[type="range"]');
 
     sliders.forEach(slider => {
         const agent = slider.dataset.agent;
         const chore = slider.dataset.chore;
         const value = slider.value;
-        const inputName = `dislike_values[${agent}][${chore}]`;
+        const inputName = `cost_values[${agent}][${chore}]`;
 
         // Check if hidden input already exists
         let existing = container.querySelector(`input[name="${CSS.escape(inputName)}"]`);
@@ -344,8 +344,8 @@ function saveDislikeValuesToHiddenInputs() {
  * @returns {boolean} - Whether the form should submit
  */
 function validateForm(event) {
-    // Save dislike values before submission
-    saveDislikeValuesToHiddenInputs();
+    // Save cost values before submission
+    saveCostValuesToHiddenInputs();
 
     const agents = getAgents();
     const chores = getChores();
@@ -360,10 +360,10 @@ function validateForm(event) {
         errors.push('At least one chore is required');
     }
 
-    // Check if we have dislike values (should have been through the flow)
-    const hiddenInputs = document.querySelectorAll('#dislike-hidden-inputs input');
+    // Check if we have cost values (should have been through the flow)
+    const hiddenInputs = document.querySelectorAll('#cost-hidden-inputs input');
     if (hiddenInputs.length === 0) {
-        errors.push('Please enter dislike values for all agents');
+        errors.push('Please enter cost values for all agents');
     }
 
     if (errors.length > 0) {
