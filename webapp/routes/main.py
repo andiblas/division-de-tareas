@@ -9,33 +9,33 @@ from flask import Blueprint, current_app, render_template, request
 main_bp = Blueprint("main", __name__)
 
 
-def parse_dislike_values(form: dict) -> dict[str, dict[str, int]]:
-    """Parse dislike_values from form data.
+def parse_cost_values(form: dict) -> dict[str, dict[str, int]]:
+    """Parse cost_values from form data.
 
-    Form data comes as: dislike_values[agent][chore] = value
+    Form data comes as: cost_values[agent][chore] = value
     Returns a nested dict: {agent: {chore: value}}
 
     Args:
         form: The request form data
 
     Returns:
-        Nested dictionary of dislike values
+        Nested dictionary of cost values
     """
-    dislike_values: dict[str, dict[str, int]] = {}
-    pattern = re.compile(r"dislike_values\[(.+?)\]\[(.+?)\]")
+    cost_values: dict[str, dict[str, int]] = {}
+    pattern = re.compile(r"cost_values\[(.+?)\]\[(.+?)\]")
 
     for key in form:
         match = pattern.match(key)
         if match:
             agent, chore = match.groups()
-            if agent not in dislike_values:
-                dislike_values[agent] = {}
+            if agent not in cost_values:
+                cost_values[agent] = {}
             try:
-                dislike_values[agent][chore] = int(form[key])
+                cost_values[agent][chore] = int(form[key])
             except ValueError:
-                dislike_values[agent][chore] = 5  # Default to neutral
+                cost_values[agent][chore] = 5  # Default to neutral
 
-    return dislike_values
+    return cost_values
 
 
 @main_bp.route("/")
@@ -50,12 +50,12 @@ def index() -> str:
 
 @main_bp.route("/calculate", methods=["POST"])
 def calculate() -> str:
-    """Receive agents, chores, and dislike values, forward to API for allocation.
+    """Receive agents, chores, and cost values, forward to API for allocation.
 
     The form submits:
     - agents: List of agent names (people)
     - chores: List of chore names (tasks)
-    - dislike_values[agent][chore]: Dislike rating (1-10) for each combination
+    - cost_values[agent][chore]: cost rating (1-10) for each combination
 
     Returns:
         Rendered template with the allocation result (or error)
@@ -63,7 +63,7 @@ def calculate() -> str:
     # Get the lists from the form submission
     agents = request.form.getlist("agents")
     chores = request.form.getlist("chores")
-    dislike_values = parse_dislike_values(request.form)
+    cost_values = parse_cost_values(request.form)
 
     # Validate inputs
     errors = []
@@ -71,8 +71,8 @@ def calculate() -> str:
         errors.append("At least one agent is required")
     if not chores:
         errors.append("At least one chore is required")
-    if not dislike_values:
-        errors.append("Dislike values are required")
+    if not cost_values:
+        errors.append("cost values are required")
 
     if errors:
         result = {
@@ -91,7 +91,7 @@ def calculate() -> str:
             json={
                 "agents": agents,
                 "chores": chores,
-                "dislike_values": dislike_values,
+                "cost_values": cost_values,
             },
             timeout=30,
         )
