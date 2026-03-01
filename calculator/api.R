@@ -65,7 +65,7 @@ function(req) {
   }
 
   # Map burden values to agent names (round to 4 decimal places for readability)
-  burden_named <- setNames(as.list(round(result$llevan, 4)), agents)
+  burden_named <- setNames(lapply(round(result$llevan, 4), jsonlite::unbox), agents)
 
   message("Allocation result: ", jsonlite::toJSON(allocation_named, auto_unbox = FALSE))
   message("Burden: ", jsonlite::toJSON(burden_named, auto_unbox = TRUE))
