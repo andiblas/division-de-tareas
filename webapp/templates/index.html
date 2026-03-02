@@ -101,10 +101,31 @@
                 <strong>Status:</strong> {{ result.status }}
             </p>
             <p class="result-message">{{ result.message }}</p>
+            {% if result.api_response and result.api_response.allocation %}
+            <table class="allocation-table">
+                <thead>
+                    <tr>
+                        <th>Agent</th>
+                        <th>Assigned Chores</th>
+                        <th>Burden</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for agent, chores in result.api_response.allocation.items() %}
+                    <tr>
+                        <td>{{ agent }}</td>
+                        <td>{{ chores | join(", ") if chores else "—" }}</td>
+                        <td>{{ (result.api_response.burden[agent] * 100) | round(1) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
             <div class="result-stats">
                 <p><strong>Agents:</strong> {{ result.agents_count }}</p>
                 <p><strong>Chores:</strong> {{ result.chores_count }}</p>
             </div>
+            {% endif %}
         </div>
     </section>
     <div class="nav-buttons nav-buttons--single">

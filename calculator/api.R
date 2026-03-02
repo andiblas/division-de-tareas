@@ -3,6 +3,8 @@
 
 library(plumber)
 
+source("funcionesVarias.R")
+
 #* @apiTitle Allocation Calculator API
 #* @apiDescription Computes fair allocation of chores among agents
 
@@ -25,18 +27,44 @@ function(req) {
   message("cost values: ", jsonlite::toJSON(cost_values, auto_unbox = TRUE))
   message("===================================")
 
-  # For now, just echo back the parameters
-  # TODO: Implement actual allocation algorithm using cost values
+  n_trab   <- length(agents)
+  n_tareas <- length(chores)
+
+  # Build matriz_valoracion: rows = chores, cols = agents, values = dislike scores
+  m <- matrix(NA_real_, nrow = n_tareas, ncol = n_trab,
+              dimnames = list(chores, agents))
+
+  for (ai in seq_along(agents)) {
+    for (ci in seq_along(chores)) {
+      m[ci, ai] <- as.numeric(cost_values[[agents[ai]]][[chores[ci]]])
+    }
+  }
+
+  message("Valuation matrix:")
+  message(paste(capture.output(print(m)), collapse = "\n"))
+
+  # Run the allocation algorithm
+  result <- repartoTareas(n_trab, m)
+
+  # Map chore indices (1-indexed) back to chore names, per agent
+  allocation_named <- list()
+  for (i in seq_along(agents)) {
+    agent_name <- agents[i]
+    chore_indices <- result$Art[[i]]
+    allocation_named[[agent_name]] <- if (length(chore_indices) == 0) character(0) else chores[chore_indices]
+  }
+
+  # Map burden values to agent names (round to 4 decimal places for readability)
+  burden_named <- setNames(lapply(round(result$llevan, 4), jsonlite::unbox), agents)
+
+  message("Allocation result: ", jsonlite::toJSON(allocation_named, auto_unbox = FALSE))
+  message("Burden: ", jsonlite::toJSON(burden_named, auto_unbox = TRUE))
+
   list(
-    status = "success",
-    message = "Stub response - allocation algorithm not yet implemented",
-    received = list(
-      agents = agents,
-      chores = chores,
-      agents_count = length(agents),
-      chores_count = length(chores),
-      cost_values = cost_values
-    )
+    status     = "success",
+    message    = "Allocation computed successfully",
+    allocation = allocation_named,
+    burden     = burden_named
   )
 }
 

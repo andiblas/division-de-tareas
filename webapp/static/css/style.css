@@ -255,6 +255,32 @@ header .subtitle {
     margin: 0;
 }
 
+/* Allocation results table */
+.allocation-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+}
+
+.allocation-table th,
+.allocation-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.allocation-table th {
+    font-weight: 600;
+    color: #555;
+    background-color: #f9f9f9;
+}
+
+.allocation-table tr:last-child td {
+    border-bottom: none;
+}
+
 /* Link styled as button */
 a.btn-next {
     display: inline-block;
