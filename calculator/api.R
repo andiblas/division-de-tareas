@@ -3,17 +3,7 @@
 
 library(plumber)
 
-# Load allocation functions (suppress install.packages calls at top of file)
-.real_install_packages <- utils::install.packages
-assign("install.packages", function(pkgs, ...) {
-  for (pkg in pkgs) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-      .real_install_packages(pkg, ...)
-    }
-  }
-}, envir = globalenv())
 source("funcionesVarias.R")
-assign("install.packages", .real_install_packages, envir = globalenv())
 
 #* @apiTitle Allocation Calculator API
 #* @apiDescription Computes fair allocation of chores among agents
