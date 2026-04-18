@@ -44,3 +44,40 @@ test_that("repartoTareasRoundRobin cycles through agents over multiple rounds", 
   expect_setequal(result$Art[[1]], c(1, 3))
   expect_setequal(result$Art[[2]], 2)
 })
+
+
+# ---- repartoTareasAllRoundRobins --------------------------------------------
+# Runs repartoTareasRoundRobin for every permutation of the agents and returns
+# a list of length n! with entries list(order, Art, llevan).
+
+find_by_order <- function(results, ord) {
+  for (r in results) {
+    if (length(r$order) == length(ord) && all(r$order == ord)) return(r)
+  }
+  NULL
+}
+
+test_that("repartoTareasAllRoundRobins returns one result per permutation with correct allocations", {
+  # 2 agents, 2 chores -> 2! = 2 permutations
+  #         A1  A2
+  # chore1   1   5
+  # chore2   2   6
+  m <- matrix(c(1, 5,
+                2, 6), nrow = 2, byrow = TRUE)
+
+  results <- repartoTareasAllRoundRobins(m)
+
+  expect_length(results, 2)
+
+  # order (1, 2): A1 picks chore 1, A2 picks chore 2
+  r12 <- find_by_order(results, c(1, 2))
+  expect_false(is.null(r12))
+  expect_setequal(r12$Art[[1]], 1)
+  expect_setequal(r12$Art[[2]], 2)
+
+  # order (2, 1): A2 picks chore 1 (lower dislike), A1 picks chore 2
+  r21 <- find_by_order(results, c(2, 1))
+  expect_false(is.null(r21))
+  expect_setequal(r21$Art[[1]], 2)
+  expect_setequal(r21$Art[[2]], 1)
+})
