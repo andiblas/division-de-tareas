@@ -1840,6 +1840,18 @@ repartoTareas=function(n_trab,matriz_valoracion){
   return(list(Art=reparto_orig,llevan=lleva))
 }
 
+repartoTareasRoundRobin=function() {
+  ## Implement me
+
+
+  ## TAREAS
+  ## 1- levantar CLAUDE CODE y darle de comer los papers
+  ## 2- hacer foco RoundRobin, y hacer una primera implementacion
+  ## 3- fijarse si hay tessts unitarios con R
+  ## 4- hacer pruebas unitarias y hacer TDD
+  
+
+}
 
 
 tareasAQuien=function(reparto){
