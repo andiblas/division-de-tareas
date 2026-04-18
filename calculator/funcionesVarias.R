@@ -1840,9 +1840,12 @@ repartoTareas=function(n_trab,matriz_valoracion){
   return(list(Art=reparto_orig,llevan=lleva))
 }
 
-repartoTareasRoundRobin=function() {
+#* Calculate chore allocation using the Round Robin method
+#* @param agentsCount Number of agents
+#* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
+repartoTareasRoundRobin=function(agentsCount,dislikeMatrix) {
+  # dislikeMatrix: rows = chores, cols = agents, values = dislike scores
   ## Implement me
-
 
   ## TAREAS
   ## 1- levantar CLAUDE CODE y darle de comer los papers
