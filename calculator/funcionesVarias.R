@@ -1845,15 +1845,27 @@ repartoTareas=function(n_trab,matriz_valoracion){
 #* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
 repartoTareasRoundRobin=function(agentsCount,dislikeMatrix) {
   # dislikeMatrix: rows = chores, cols = agents, values = dislike scores
-  ## Implement me
+  n_chores <- nrow(dislikeMatrix)
 
-  ## TAREAS
-  ## 1- levantar CLAUDE CODE y darle de comer los papers
-  ## 2- hacer foco RoundRobin, y hacer una primera implementacion
-  ## 3- fijarse si hay tessts unitarios con R
-  ## 4- hacer pruebas unitarias y hacer TDD
-  
+  art <- vector("list", agentsCount)
+  for (i in seq_len(agentsCount)) art[[i]] <- integer(0)
 
+  available <- seq_len(n_chores)
+
+  while (length(available) > 0) {
+    for (agent in seq_len(agentsCount)) {
+      if (length(available) == 0) break
+      agent_dislikes <- dislikeMatrix[available, agent]
+      pick_pos <- which.min(agent_dislikes)
+      chosen_chore <- available[pick_pos]
+      art[[agent]] <- c(art[[agent]], chosen_chore)
+      available <- available[-pick_pos]
+    }
+  }
+
+  lleva <- diag(valoracionReparto(art, dislikeMatrix))
+
+  return(list(Art = art, llevan = lleva))
 }
 
 
