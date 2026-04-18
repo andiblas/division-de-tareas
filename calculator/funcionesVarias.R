@@ -7,6 +7,7 @@ library("ggplot2")
 library("plotly")
 library("gridExtra")
 library("partitions")
+library("combinat")
 ####################
 # asignacion
 ####################
@@ -1841,10 +1842,11 @@ repartoTareas=function(n_trab,matriz_valoracion){
 }
 
 #* Calculate chore allocation using the Round Robin method
-#* @param agentsCount Number of agents
 #* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
-repartoTareasRoundRobin=function(agentsCount,dislikeMatrix) {
+#* @param agentsOrder Integer vector of agent indices giving the order in which agents pick
+repartoTareasRoundRobin=function(dislikeMatrix, agentsOrder) {
   # dislikeMatrix: rows = chores, cols = agents, values = dislike scores
+  agentsCount <- ncol(dislikeMatrix)
   n_chores <- nrow(dislikeMatrix)
 
   art <- vector("list", agentsCount)
@@ -1853,7 +1855,7 @@ repartoTareasRoundRobin=function(agentsCount,dislikeMatrix) {
   available <- seq_len(n_chores)
 
   while (length(available) > 0) {
-    for (agent in seq_len(agentsCount)) {
+    for (agent in agentsOrder) {
       if (length(available) == 0) break
       agent_dislikes <- dislikeMatrix[available, agent]
       pick_pos <- which.min(agent_dislikes)
@@ -1866,6 +1868,24 @@ repartoTareasRoundRobin=function(agentsCount,dislikeMatrix) {
   lleva <- diag(valoracionReparto(art, dislikeMatrix))
 
   return(list(Art = art, llevan = lleva))
+}
+
+
+#* Run repartoTareasRoundRobin for every possible agent ordering.
+#* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
+#* Returns a list with one entry per permutation, each a list(order, Art, llevan).
+repartoTareasAllRoundRobins=function(dislikeMatrix) {
+  agentsCount <- ncol(dislikeMatrix)
+  orderings <- permn(agentsCount)
+
+  results <- vector("list", length(orderings))
+  for (k in seq_along(orderings)) {
+    ord <- orderings[[k]]
+    res <- repartoTareasRoundRobin(dislikeMatrix, ord)
+    results[[k]] <- list(order = ord, Art = res$Art, llevan = res$llevan)
+  }
+
+  results
 }
 
 

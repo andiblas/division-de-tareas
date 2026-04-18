@@ -22,7 +22,7 @@ test_that("repartoTareasRoundRobin assigns each agent their least-disliked chore
   m <- matrix(c(1, 10,
                 10, 1), nrow = 2, byrow = TRUE)
 
-  result <- repartoTareasRoundRobin(2, m)
+  result <- repartoTareasRoundRobin(m, c(1, 2))
 
   expect_setequal(result$Art[[1]], 1)  # A1 takes chore 1
   expect_setequal(result$Art[[2]], 2)  # A2 takes chore 2
@@ -39,7 +39,7 @@ test_that("repartoTareasRoundRobin cycles through agents over multiple rounds", 
                 2, 6,
                 3, 7), nrow = 3, byrow = TRUE)
 
-  result <- repartoTareasRoundRobin(2, m)
+  result <- repartoTareasRoundRobin(m, c(1, 2))
 
   expect_setequal(result$Art[[1]], c(1, 3))
   expect_setequal(result$Art[[2]], 2)
