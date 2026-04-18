@@ -4,7 +4,7 @@
 
 library(testthat)
 
-setwd(dirname(sys.frame(1)$ofile))
+# setwd(dirname(sys.frame(1)$ofile))
 source("funcionesVarias.R")
 
 # ---- repartoTareasRoundRobin -------------------------------------------------
