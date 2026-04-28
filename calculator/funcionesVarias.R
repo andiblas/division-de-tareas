@@ -7,6 +7,7 @@ library("ggplot2")
 library("plotly")
 library("gridExtra")
 library("partitions")
+library("combinat")
 ####################
 # asignacion
 ####################
@@ -1840,6 +1841,56 @@ repartoTareas=function(n_trab,matriz_valoracion){
   return(list(Art=reparto_orig,llevan=lleva))
 }
 
+#* Calculate chore allocation using the Round Robin method
+#* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
+#* @param agentsOrder Integer vector of agent indices giving the order in which agents pick
+repartoTareasRoundRobin=function(dislikeMatrix, agentsOrder) {
+  agentsCount <- ncol(dislikeMatrix)
+  n_chores <- nrow(dislikeMatrix)
+
+  # One empty slot per agent to accumulate assigned chore indices
+  art <- vector("list", agentsCount)
+  for (i in seq_len(agentsCount)) art[[i]] <- integer(0)
+
+  # Track which chores haven't been picked yet
+  available <- seq_len(n_chores)
+
+  while (length(available) > 0) {
+    for (agent in agentsOrder) {
+      if (length(available) == 0) break
+      # Each agent picks the available chore they dislike the least
+      agent_dislikes <- dislikeMatrix[available, agent]
+      pick_pos <- which.min(agent_dislikes)
+      chosen_chore <- available[pick_pos]
+      art[[agent]] <- c(art[[agent]], chosen_chore)
+      # Remove picked chore so no other agent can take it
+      available <- available[-pick_pos]
+    }
+  }
+
+  # Compute each agent's burden as their share of their own valuation
+  lleva <- diag(valoracionReparto(art, dislikeMatrix))
+
+  return(list(Art = art, llevan = lleva))
+}
+
+
+#* Run repartoTareasRoundRobin for every possible agent ordering.
+#* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
+#* Returns a list with one entry per permutation, each a list(order, Art, llevan).
+repartoTareasAllRoundRobins=function(dislikeMatrix) {
+  agentsCount <- ncol(dislikeMatrix)
+  orderings <- permn(agentsCount)
+
+  results <- vector("list", length(orderings))
+  for (k in seq_along(orderings)) {
+    ord <- orderings[[k]]
+    res <- repartoTareasRoundRobin(dislikeMatrix, ord)
+    results[[k]] <- list(order = ord, Art = res$Art, llevan = res$llevan)
+  }
+
+  results
+}
 
 
 tareasAQuien=function(reparto){
