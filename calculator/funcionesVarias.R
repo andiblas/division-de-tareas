@@ -1845,48 +1845,31 @@ repartoTareas=function(n_trab,matriz_valoracion){
 #* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
 #* @param agentsOrder Integer vector of agent indices giving the order in which agents pick
 repartoTareasRoundRobin=function(dislikeMatrix, agentsOrder) {
-  # dislikeMatrix: rows = chores, cols = agents, values = dislike scores
   agentsCount <- ncol(dislikeMatrix)
   n_chores <- nrow(dislikeMatrix)
 
-  cat("--- repartoTareasRoundRobin START ---\n")
-  cat("ncol(dislikeMatrix) = ", agentsCount, "  (number of agents/columns)\n")
-  cat("nrow(dislikeMatrix) = ", n_chores, "  (number of chores/rows)\n")
-  cat("agentsOrder = c(", paste(agentsOrder, collapse = ", "), ")\n")
-
+  # One empty slot per agent to accumulate assigned chore indices
   art <- vector("list", agentsCount)
-  cat("vector('list', ", agentsCount, ") created art = a list with ", agentsCount, " empty slots: ", paste(capture.output(str(art)), collapse = " "), "\n")
-
   for (i in seq_len(agentsCount)) art[[i]] <- integer(0)
-  cat("seq_len(", agentsCount, ") = c(", paste(seq_len(agentsCount), collapse = ", "), ")  (integers 1 to ", agentsCount, ")\n")
-  cat("After init loop, each art slot is integer(0) (empty integer vector)\n")
 
+  # Track which chores haven't been picked yet
   available <- seq_len(n_chores)
-  cat("seq_len(", n_chores, ") = c(", paste(available, collapse = ", "), ")  (all chore indices, initially all available)\n")
 
-  round <- 0
   while (length(available) > 0) {
-    round <- round + 1
-    cat("\n=== ROUND ", round, " === available chores: c(", paste(available, collapse = ", "), ")\n")
     for (agent in agentsOrder) {
       if (length(available) == 0) break
+      # Each agent picks the available chore they dislike the least
       agent_dislikes <- dislikeMatrix[available, agent]
-      cat("  Agent ", agent, " sees dislikes for available chores: ", paste(available, "=", agent_dislikes, collapse = ", "), "\n")
       pick_pos <- which.min(agent_dislikes)
       chosen_chore <- available[pick_pos]
-      cat("  which.min() -> position ", pick_pos, " in available -> chore ", chosen_chore, "\n")
       art[[agent]] <- c(art[[agent]], chosen_chore)
+      # Remove picked chore so no other agent can take it
       available <- available[-pick_pos]
-      cat("  Agent ", agent, " now has chores: c(", paste(art[[agent]], collapse = ", "), ") | remaining available: c(", paste(available, collapse = ", "), ")\n")
     }
   }
 
-  cat("\nFinal art (chore assignments per agent):\n")
-  for (i in seq_len(agentsCount)) cat("  Agent ", i, ": c(", paste(art[[i]], collapse = ", "), ")\n")
-
+  # Compute each agent's burden as their share of their own valuation
   lleva <- diag(valoracionReparto(art, dislikeMatrix))
-  cat("llevan (burden per agent): ", paste(round(lleva, 4), collapse = ", "), "\n")
-  cat("--- repartoTareasRoundRobin END ---\n")
 
   return(list(Art = art, llevan = lleva))
 }
