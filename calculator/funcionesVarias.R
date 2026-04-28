@@ -1849,23 +1849,44 @@ repartoTareasRoundRobin=function(dislikeMatrix, agentsOrder) {
   agentsCount <- ncol(dislikeMatrix)
   n_chores <- nrow(dislikeMatrix)
 
+  message("--- repartoTareasRoundRobin START ---")
+  message("ncol(dislikeMatrix) = ", agentsCount, "  (number of agents/columns)")
+  message("nrow(dislikeMatrix) = ", n_chores, "  (number of chores/rows)")
+  message("agentsOrder = c(", paste(agentsOrder, collapse = ", "), ")")
+
   art <- vector("list", agentsCount)
+  message("vector('list', ", agentsCount, ") created art = a list with ", agentsCount, " empty slots: ", paste(capture.output(str(art)), collapse = " "))
+
   for (i in seq_len(agentsCount)) art[[i]] <- integer(0)
+  message("seq_len(", agentsCount, ") = c(", paste(seq_len(agentsCount), collapse = ", "), ")  (integers 1 to ", agentsCount, ")")
+  message("After init loop, each art slot is integer(0) (empty integer vector)")
 
   available <- seq_len(n_chores)
+  message("seq_len(", n_chores, ") = c(", paste(available, collapse = ", "), ")  (all chore indices, initially all available)")
 
+  round <- 0
   while (length(available) > 0) {
+    round <- round + 1
+    message("\n=== ROUND ", round, " === available chores: c(", paste(available, collapse = ", "), ")")
     for (agent in agentsOrder) {
       if (length(available) == 0) break
       agent_dislikes <- dislikeMatrix[available, agent]
+      message("  Agent ", agent, " sees dislikes for available chores: ", paste(available, "=", agent_dislikes, collapse = ", "))
       pick_pos <- which.min(agent_dislikes)
       chosen_chore <- available[pick_pos]
+      message("  which.min() -> position ", pick_pos, " in available -> chore ", chosen_chore)
       art[[agent]] <- c(art[[agent]], chosen_chore)
       available <- available[-pick_pos]
+      message("  Agent ", agent, " now has chores: c(", paste(art[[agent]], collapse = ", "), ") | remaining available: c(", paste(available, collapse = ", "), ")")
     }
   }
 
+  message("\nFinal art (chore assignments per agent):")
+  for (i in seq_len(agentsCount)) message("  Agent ", i, ": c(", paste(art[[i]], collapse = ", "), ")")
+
   lleva <- diag(valoracionReparto(art, dislikeMatrix))
+  message("llevan (burden per agent): ", paste(round(lleva, 4), collapse = ", "))
+  message("--- repartoTareasRoundRobin END ---\n")
 
   return(list(Art = art, llevan = lleva))
 }
