@@ -1841,6 +1841,131 @@ repartoTareas=function(n_trab,matriz_valoracion){
   return(list(Art=reparto_orig,llevan=lleva))
 }
 
+
+#* Calculate chore allocation using the Top-Trading Envy-Cycle Elimination algorithm
+#* (Bhaskar, Sricharan, Vaish 2022 — Algorithm 2)
+#*
+#* Guarantees an EF1 (envy-free up to one chore) allocation for additive valuations.
+#* Iterates through chores one at a time. Each chore is assigned to a "sink" agent
+#* (one who does not envy anyone). If no sink exists, resolves a cycle in the
+#* top-trading envy graph (where each agent points to their most preferred bundle)
+#* to create one.
+#*
+#* @param n_trab Integer, number of agents
+#* @param matriz_valoracion Matrix[n_tareas x n_trab] of dislike costs (positive values, higher = more disliked)
+#* @return list(Art, llevan) — Art[[i]] = chore indices for agent i, llevan[i] = normalized burden
+repartoTareasTopTrading=function(n_trab, matriz_valoracion){
+  M=matriz_valoracion
+  n_tareas=dim(M)[1]
+  if(n_trab != dim(M)[2]){stop("ojo, no coinciden el número de columnas con la cantidad de trabajadores")}
+
+  Art=vector("list", n_trab)
+  for(i in seq_len(n_trab)) Art[[i]]=integer(0)
+
+  # Cost of a bundle of chores for a given agent (additive)
+  costo_paquete=function(agente, tareas){
+    if(length(tareas)==0) return(0)
+    sum(M[tareas, agente])
+  }
+
+  # Find a sink in the envy graph: an agent who does not envy anyone.
+  # For chores, agent i envies agent k if cost_i(A_k) < cost_i(A_i).
+  # A sink has no outgoing edges — their bundle is at most as costly as any
+  # other bundle from their own perspective.
+  encontrar_sink=function(alloc){
+    sinks=c()
+    for(i in seq_len(n_trab)){
+      mi_costo=costo_paquete(i, alloc[[i]])
+      es_sink=TRUE
+      for(k in seq_len(n_trab)){
+        if(k==i) next
+        if(costo_paquete(i, alloc[[k]]) < mi_costo){
+          es_sink=FALSE
+          break
+        }
+      }
+      if(es_sink) sinks=c(sinks, i)
+    }
+    if(length(sinks)==0) return(NULL)
+    sinks[sample.int(length(sinks), 1)]
+  }
+
+  # Build the top-trading envy graph and find a cycle.
+  # Each envious agent points to the agent whose bundle they prefer most
+  # (lowest cost). Agents who are sinks have no outgoing edge.
+  # By Lemma 6 of the paper, if G_A has no sink then T_A must have a cycle.
+  encontrar_ciclo_top_trading=function(alloc){
+    puntero=integer(n_trab)
+    for(i in seq_len(n_trab)){
+      mi_costo=costo_paquete(i, alloc[[i]])
+      mejor_agente=0L
+      mejor_costo=mi_costo
+      for(k in seq_len(n_trab)){
+        if(k==i) next
+        k_costo=costo_paquete(i, alloc[[k]])
+        if(k_costo < mejor_costo){
+          mejor_costo=k_costo
+          mejor_agente=k
+        }
+      }
+      puntero[i]=mejor_agente
+    }
+
+    visitado=integer(n_trab)
+    paso=0L
+    for(inicio in seq_len(n_trab)){
+      if(visitado[inicio]>0) next
+      camino=c()
+      actual=inicio
+      while(actual>0 && visitado[actual]==0){
+        paso=paso+1L
+        visitado[actual]=paso
+        camino=c(camino, actual)
+        actual=puntero[actual]
+      }
+      if(actual>0 && actual %in% camino){
+        idx_inicio=which(camino==actual)
+        return(camino[idx_inicio:length(camino)])
+      }
+    }
+    return(NULL)
+  }
+
+  # Resolve a cycle: each agent in the cycle receives the bundle of the agent
+  # they point to (swap backwards along the cycle). Agents outside the cycle
+  # keep their bundles. After resolution, all cycle participants hold their
+  # most preferred bundle and become sinks (Lemma 7).
+  resolver_ciclo=function(alloc, ciclo){
+    n_ciclo=length(ciclo)
+    paquetes_guardados=lapply(ciclo, function(i) alloc[[i]])
+    for(idx in seq_along(ciclo)){
+      sig_idx=if(idx==n_ciclo) 1L else idx+1L
+      alloc[[ciclo[idx]]]=paquetes_guardados[[sig_idx]]
+    }
+    return(alloc)
+  }
+
+  # Main loop: assign each chore to a sink agent (Algorithm 2)
+  for(c in seq_len(n_tareas)){
+    sink_agente=encontrar_sink(Art)
+
+    if(is.null(sink_agente)){
+      ciclo=encontrar_ciclo_top_trading(Art)
+      if(!is.null(ciclo)){
+        Art=resolver_ciclo(Art, ciclo)
+      }
+      sink_agente=encontrar_sink(Art)
+    }
+
+    Art[[sink_agente]]=c(Art[[sink_agente]], c)
+  }
+
+  lleva=diag(valoracionReparto(Art, matriz_valoracion))
+
+  return(list(Art=Art, llevan=lleva))
+}
+
+
 #* Calculate chore allocation using the Round Robin method
 #* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
 #* @param agentsOrder Integer vector of agent indices giving the order in which agents pick
