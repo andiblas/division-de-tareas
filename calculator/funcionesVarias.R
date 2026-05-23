@@ -2801,9 +2801,15 @@ for(i in 1:1000){
   }
 }
 
-diag(valoracion_obtenida_0)
-valoracion_obtenida_1
-diag(valoracion_obtenida_2)
-sum(diag(valoracion_obtenida_0))
-sum(valoracion_obtenida_1)
-sum(diag(valoracion_obtenida_2))
+cat("\n===== Burden per agent (best of 1000 runs each) =====\n")
+cat("chau_tareas_feas : ", round(diag(valoracion_obtenida_0), 4), "\n")
+cat("repartoTareas    : ", round(valoracion_obtenida_1, 4), "\n")
+cat("chau_tareas_feas2: ", round(diag(valoracion_obtenida_2), 4), "\n")
+cat("\n===== Total burden (lower = more efficient) =====\n")
+cat("chau_tareas_feas : ", round(sum(diag(valoracion_obtenida_0)), 4), "\n")
+cat("repartoTareas    : ", round(sum(valoracion_obtenida_1), 4), "\n")
+cat("chau_tareas_feas2: ", round(sum(diag(valoracion_obtenida_2)), 4), "\n")
+cat("\n===== Max burden (lower = more fair) =====\n")
+cat("chau_tareas_feas : ", round(max(diag(valoracion_obtenida_0)), 4), "\n")
+cat("repartoTareas    : ", round(max(valoracion_obtenida_1), 4), "\n")
+cat("chau_tareas_feas2: ", round(max(diag(valoracion_obtenida_2)), 4), "\n")
