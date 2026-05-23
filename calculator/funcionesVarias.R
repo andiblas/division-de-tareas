@@ -2687,3 +2687,123 @@ envidia_heredan_weighted=function(valoraciones,reparto,pesos){
   masEnvidiado=donde[2]
   list(envidiaMat=envidiaMat,maximoEnvyRatio=maximoEnvyRatio,maximaEnvidia=maximaEnvidia,masEnvidioso=masEnvidioso,masEnvidiado=masEnvidiado,envidian=envidian)
 }
+
+
+chau_tareas_feas = function(valoraciones){
+  M=valoraciones
+  n_tareas=dim(M)[1]
+  n_agentes=dim(M)[2]
+  M=proporciones(M) #para que las columnas sumen 1
+  reparto = vector(mode="list",length=n_agentes)
+  restantes=1:n_tareas
+  while(length(restantes)>0){
+    matriz_costo=valoracionReparto(reparto,M)  #cuánto sienten que trabajan con lo repartido hasta aquí
+    i_star = which(diag(matriz_costo)==max(diag(matriz_costo))) #quienes son los que más sienten que trabajan
+    largo_i_star=length(i_star)
+    sorteo_i=sample(1:largo_i_star,1)
+    valoracion_restantes = M[restantes,i_star[sorteo_i]] # vemos como valora lo que queda el que va a elegir una tarea para que le asignen a otro
+    c_star = which(valoracion_restantes==max(valoracion_restantes)) # las tareas más pesadas
+    largo_c_star=length(c_star)
+    sorteo_c=sample(1:largo_c_star,1)
+    postulantes=(1:n_agentes)[-i_star[sorteo_i]] # los que pueden recibir la tarea (los que menos trabajn hasta aquí)
+    j_star_indices = which(diag(matriz_costo)[-i_star[sorteo_i]]==min(diag(matriz_costo)[-i_star[sorteo_i]]))
+    largo_j_star_indices=length(j_star_indices)
+    sorteo_j=sample(1:largo_j_star_indices,1)
+    j_star=postulantes[j_star_indices[sorteo_j]]
+    reparto[[j_star]]=c(reparto[[j_star]],restantes[c_star[sorteo_c]])
+    restantes = setdiff(restantes,restantes[c_star[sorteo_c]])
+  }
+  matriz_costo_final=valoracionReparto(reparto,M)
+  list(reparto=reparto,matriz_costo_final=matriz_costo_final)
+}
+
+chau_tareas_feas2 = function(valoraciones){
+  M=valoraciones
+  n_tareas=dim(M)[1]
+  n_agentes=dim(M)[2]
+  M=proporciones(M)
+
+  sorteo=function(candidatos){
+    candidatos[sample.int(length(candidatos),1)]
+  }
+
+  agente_mas_cargado=function(reparto){
+    costos=diag(valoracionReparto(reparto,M))
+    sorteo(which(costos==max(costos)))
+  }
+
+  tarea_mas_pesada=function(restantes, agente){
+    valoracion_restantes=M[restantes,agente]
+    restantes[sorteo(which(valoracion_restantes==max(valoracion_restantes)))]
+  }
+
+  agente_menor_costo=function(tarea, excluido){
+    postulantes=(1:n_agentes)[-excluido]
+    costos_postulantes=M[tarea,postulantes]
+    postulantes[sorteo(which(costos_postulantes==min(costos_postulantes)))]
+  }
+
+  reparto = vector(mode="list",length=n_agentes)
+  restantes=1:n_tareas
+  while(length(restantes)>0){
+    i_star=agente_mas_cargado(reparto)
+    tarea_elegida=tarea_mas_pesada(restantes, i_star)
+    j_star=agente_menor_costo(tarea_elegida, i_star)
+    reparto[[j_star]]=c(reparto[[j_star]],tarea_elegida)
+    restantes=setdiff(restantes,tarea_elegida)
+  }
+  matriz_costo_final=valoracionReparto(reparto,M)
+  list(reparto=reparto,matriz_costo_final=matriz_costo_final)
+}
+
+
+#valoraciones = matrix(c(seq(1,17,by=2)[-9],13,1:9,seq(1,25,by=3)),9,3)
+#valoraciones=matrix(c(1:10,2:11,3:12,4:13,5:14),10,5)
+#valoraciones=matrix(c(1:5,5:1,2:6,6:2,3:7,7:3,4:8,8:4,5:9,9:5),10,5)
+#valoraciones=proporciones(valoraciones)
+n_tareas=12
+n_agentes=3
+cotizacion=rdirichlet(1,rep(1,n_tareas))
+valoraciones=t(rdirichlet(n_agentes,as.vector(cotizacion)*1000))
+
+reparto_0=vector(mode="list",length=dim(valoraciones)[2])
+reparto_0[[1]]=1:dim(valoraciones)[1]
+reparto_elegido_0=reparto_0
+for(i in 1:1000){
+  reparto_aux=chau_tareas_feas(valoraciones)
+  if(comparacion_leximin_pp_tareas(reparto_elegido_0,reparto_aux$reparto,valoraciones)==2){
+    reparto_elegido_0=reparto_aux$reparto
+    valoracion_obtenida_0=reparto_aux$matriz_costo_final
+  }
+}
+#reparto_elegido_0
+
+
+reparto_1=vector(mode="list",length=dim(valoraciones)[2])
+reparto_1[[1]]=1:dim(valoraciones)[1]
+reparto_elegido_1=reparto_1
+for(i in 1:1000){
+  reparto_aux=repartoTareas(n_agentes,valoraciones)
+  if(comparacion_leximin_pp_tareas(reparto_elegido_1,reparto_aux$reparto,valoraciones)==2){
+    reparto_elegido_1=reparto_aux$Art
+    valoracion_obtenida_1=reparto_aux$llevan
+  }
+}
+
+reparto_2=vector(mode="list",length=dim(valoraciones)[2])
+reparto_2[[1]]=1:dim(valoraciones)[1]
+reparto_elegido_2=reparto_2
+for(i in 1:1000){
+  reparto_aux=chau_tareas_feas2(valoraciones)
+  if(comparacion_leximin_pp_tareas(reparto_elegido_2,reparto_aux$reparto,valoraciones)==2){
+    reparto_elegido_2=reparto_aux$reparto
+    valoracion_obtenida_2=reparto_aux$matriz_costo_final
+  }
+}
+
+diag(valoracion_obtenida_0)
+valoracion_obtenida_1
+diag(valoracion_obtenida_2)
+sum(diag(valoracion_obtenida_0))
+sum(valoracion_obtenida_1)
+sum(diag(valoracion_obtenida_2))
