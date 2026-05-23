@@ -2757,6 +2757,75 @@ chau_tareas_feas2 = function(valoraciones){
 }
 
 
+comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
+  nombres = c("chau_tareas_feas", "repartoTareas", "chau_tareas_feas2")
+  victorias = setNames(integer(3), nombres)
+  totales = matrix(nrow=n_tests, ncol=3, dimnames=list(NULL, nombres))
+
+  reparto_inicial = function(valoraciones){
+    reparto = vector(mode="list", length=dim(valoraciones)[2])
+    reparto[[1]] = 1:dim(valoraciones)[1]
+    reparto
+  }
+
+  mejor_de_n = function(algoritmo, valoraciones, n_iter){
+    reparto_elegido = reparto_inicial(valoraciones)
+    mejor_carga = Inf
+    for(i in 1:n_iter){
+      reparto_aux = algoritmo(valoraciones)
+      if(comparacion_leximin_pp_tareas(reparto_elegido, reparto_aux$reparto, valoraciones)==2){
+        reparto_elegido = reparto_aux$reparto
+        mejor_carga = reparto_aux$carga_total
+      }
+    }
+    mejor_carga
+  }
+
+  wrapper_0 = function(valoraciones){
+    res = chau_tareas_feas(valoraciones)
+    res$carga_total = sum(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_1 = function(valoraciones){
+    res = repartoTareas(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = sum(res$llevan)
+    res
+  }
+  wrapper_2 = function(valoraciones){
+    res = chau_tareas_feas2(valoraciones)
+    res$carga_total = sum(diag(res$matriz_costo_final))
+    res
+  }
+
+  wrappers = list(wrapper_0, wrapper_1, wrapper_2)
+
+  for(t in 1:n_tests){
+    cotizacion = rdirichlet(1, rep(1, n_tareas))
+    valoraciones = t(rdirichlet(n_agentes, as.vector(cotizacion)*1000))
+
+    for(a in 1:3){
+      totales[t, a] = mejor_de_n(wrappers[[a]], valoraciones, n_iter)
+    }
+
+    ganador = which.min(totales[t, ])
+    victorias[ganador] = victorias[ganador] + 1
+
+    cat(sprintf("Test %d/%d — burdens: %.4f | %.4f | %.4f — winner: %s\n",
+                t, n_tests, totales[t,1], totales[t,2], totales[t,3], nombres[ganador]))
+  }
+
+  cat("\n===== Results =====\n")
+  for(a in 1:3){
+    cat(sprintf("%-20s  wins: %d/%d (%.1f%%)  avg burden: %.4f\n",
+                nombres[a], victorias[a], n_tests,
+                100*victorias[a]/n_tests, mean(totales[,a])))
+  }
+
+  list(victorias=victorias, totales=totales)
+}
+
+
 #valoraciones = matrix(c(seq(1,17,by=2)[-9],13,1:9,seq(1,25,by=3)),9,3)
 #valoraciones=matrix(c(1:10,2:11,3:12,4:13,5:14),10,5)
 #valoraciones=matrix(c(1:5,5:1,2:6,6:2,3:7,7:3,4:8,8:4,5:9,9:5),10,5)
