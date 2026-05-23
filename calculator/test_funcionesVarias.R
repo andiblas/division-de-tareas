@@ -190,6 +190,40 @@ test_that("TopTrading is EF1 with asymmetric preferences", {
   expect_equal(ef1_check$ef1, 1)
 })
 
+# ---- chau_tareas_feas2 ------------------------------------------------------
+# Greedy algorithm: the most burdened agent picks the heaviest remaining chore
+# and assigns it to the agent (excluding themselves) with the lowest cost for it.
+
+test_that("chau_tareas_feas2 assigns each chore to the agent who dislikes it least", {
+  # 2 agents, 2 chores — each agent has one cheap and one expensive chore.
+  #         A1  A2
+  # chore1  10   1    → A2 has lower cost
+  # chore2   1  10    → A1 has lower cost
+  #
+  # Trace (after proporciones, cols sum to 1):
+  #   A1: chore1=10/11, chore2=1/11   A2: chore1=1/11, chore2=10/11
+  #
+  # Iter 1: all burdens=0, tie → random i_star.
+  #   If i_star=A1: heaviest for A1 is chore1 (10/11). Lowest cost for chore1
+  #     excluding A1 → A2 (1/11). A2 gets chore1.
+  #   If i_star=A2: heaviest for A2 is chore2 (10/11). Lowest cost for chore2
+  #     excluding A2 → A1 (1/11). A1 gets chore2.
+  # Iter 2: the burdened agent (1/11) picks the remaining chore and assigns it
+  #   to the other (who also has the lowest cost for it).
+  # Either path: A1 gets chore2, A2 gets chore1.
+  m <- matrix(c(10, 1,
+                 1, 10), nrow = 2, byrow = TRUE)
+
+  result <- chau_tareas_feas2(m)
+
+  expect_equal(result$reparto[[1]], 2)
+  expect_equal(result$reparto[[2]], 1)
+
+  all_assigned <- sort(unlist(result$reparto))
+  expect_equal(all_assigned, 1:2)
+})
+
+
 test_that("TopTrading is EF1 across multiple random seeds", {
   m <- matrix(c(
     1, 2, 1,
