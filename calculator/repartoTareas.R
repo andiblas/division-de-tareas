@@ -42,6 +42,140 @@ envidia_tareas=function(valoraciones,reparto){
   list(envidiaMat=envidiaMat,maximaEnvidia=maximaEnvidia,masEnvidioso=masEnvidioso,masEnvidiado=masEnvidiado,enviRatio=envyRatio)
 }
 
+envidia2=function(valoraciones,reparto){
+  S=valoracionReparto(reparto,valoraciones)
+  props=proporciones(valoraciones)
+  n_agentes=dim(valoraciones)[2]
+  alfa_ef_mat=alfa_efx_mat=alfa_ef1_mat=matrix(,n_agentes,n_agentes)
+  alfa_prop_vec=alfa_propx_vec=alfa_prop1_vec=vector(,n_agentes)
+  diag(alfa_ef_mat)=diag(alfa_efx_mat)=diag(alfa_ef1_mat)=1
+  #envidiaMat=envyRatioMat=matrix(,k1,k1)
+  #envidian=vector(,length=k1)
+  for(i in 1:n_agentes){
+    for(j in (1:n_agentes)[-i]){
+      if((S[i,i]==0)&(S[i,j]==0)){
+        alfa_ef_mat[i,j]=1
+      }else{
+        alfa_ef_mat[i,j]=S[i,i]/S[i,j]
+      }
+      #ahora alfa_efx_mat
+      if(length(reparto[[j]])==0){
+        denom1_ij=0}else{
+          denom1_ij=S[i,j]-min(props[reparto[[j]],i])
+        }
+      if((S[i,i]==0)&(denom1_ij==0)){
+        alfa_efx_mat[i,j]=1
+      }else{
+        alfa_efx_mat[i,j]=S[i,i]/denom1_ij
+      }
+      
+      #ahora alfa_ef1_mat
+      if(length(reparto[[j]])==0){
+        denom2_ij=0}else{
+          denom2_ij=S[i,j]-max(props[reparto[[j]],i])
+        }
+      if((S[i,i]==0)&(denom2_ij==0)){
+        alfa_ef1_mat[i,j]=1
+      }else{
+        alfa_ef1_mat[i,j]=S[i,i]/denom2_ij
+      }
+    }
+  }
+  alfa_ef=min(alfa_ef_mat[row(alfa_ef_mat)!=col(alfa_ef_mat)])
+  alfa_efx=min(alfa_efx_mat[row(alfa_efx_mat)!=col(alfa_efx_mat)])
+  alfa_ef1=min(alfa_ef1_mat[row(alfa_ef1_mat)!=col(alfa_ef1_mat)])
+  
+  alfa_prop=min(n_agentes*diag(S))
+  for(i in 1:n_agentes){
+    alfa_prop1_vec[i]=(S[i,i]+max(props[-reparto[[i]],i]))*n_agentes
+    alfa_propx_vec[i]=(S[i,i]+min(props[-reparto[[i]],i]))*n_agentes
+  }
+  alfa_prop1=min(alfa_prop1_vec)
+  alfa_propx=min(alfa_propx_vec)
+  list(alfa_ef=alfa_ef,
+       alfa_ef1=alfa_ef1,
+       alfa_efx=alfa_efx,
+       alfa_prop=alfa_prop,
+       alfa_prop1=alfa_prop1,
+       alfa_propx=alfa_propx)
+}
+
+envidia2_tareas = function(valoraciones, reparto) {
+  S = valoracionReparto(reparto, valoraciones)
+  props = proporciones(valoraciones)
+  n_agentes = dim(valoraciones)[2]
+
+  alfa_ef_mat = alfa_efx_mat = alfa_ef1_mat = matrix(, n_agentes, n_agentes)
+  alfa_prop1_vec = alfa_propx_vec = vector(, n_agentes)
+  diag(alfa_ef_mat) = diag(alfa_efx_mat) = diag(alfa_ef1_mat) = 1
+
+  for(i in 1:n_agentes) {
+    for(j in (1:n_agentes)[-i]) {
+
+      # Base EF: same ratio as goods but α > 1 now signals envy
+      if((S[i,i] == 0) & (S[i,j] == 0)) {
+        alfa_ef_mat[i,j] = 1
+      } else {
+        alfa_ef_mat[i,j] = S[i,i] / S[i,j]   # Inf when S[i,j]=0 and S[i,i]>0
+      }
+
+      # EFX: remove the *lightest* chore from i's bundle (hardest condition — worst-case removal)
+      if(length(reparto[[i]]) == 0) {
+        num_efx = 0
+      } else {
+        num_efx = S[i,i] - min(props[reparto[[i]], i])
+      }
+      if((num_efx == 0) & (S[i,j] == 0)) {
+        alfa_efx_mat[i,j] = 1
+      } else {
+        alfa_efx_mat[i,j] = num_efx / S[i,j]
+      }
+
+      # EF1: remove the *heaviest* chore from i's bundle (easiest condition — best-case removal)
+      if(length(reparto[[i]]) == 0) {
+        num_ef1 = 0
+      } else {
+        num_ef1 = S[i,i] - max(props[reparto[[i]], i])
+      }
+      if((num_ef1 == 0) & (S[i,j] == 0)) {
+        alfa_ef1_mat[i,j] = 1
+      } else {
+        alfa_ef1_mat[i,j] = num_ef1 / S[i,j]
+      }
+    }
+  }
+
+  # Worst-case is now the maximum (α > 1 is bad for chores)
+  alfa_ef  = max(alfa_ef_mat[row(alfa_ef_mat) != col(alfa_ef_mat)])
+  alfa_efx = max(alfa_efx_mat[row(alfa_efx_mat) != col(alfa_efx_mat)])
+  alfa_ef1 = max(alfa_ef1_mat[row(alfa_ef1_mat) != col(alfa_ef1_mat)])
+
+  # Proportionality: want n*S[i,i] ≤ 1, so max is the relevant aggregate
+  alfa_prop = max(n_agentes * diag(S))
+
+  for(i in 1:n_agentes) {
+    if(length(reparto[[i]]) == 0) {
+      alfa_prop1_vec[i] = 0
+      alfa_propx_vec[i] = 0
+    } else {
+      # PROP1: remove heaviest chore from i (easiest to satisfy)
+      alfa_prop1_vec[i] = (S[i,i] - max(props[reparto[[i]], i])) * n_agentes
+      # PROPx: remove lightest chore from i (hardest to satisfy)
+      alfa_propx_vec[i] = (S[i,i] - min(props[reparto[[i]], i])) * n_agentes
+    }
+  }
+  alfa_prop1 = max(alfa_prop1_vec)
+  alfa_propx = max(alfa_propx_vec)
+
+  list(
+    alfa_ef    = alfa_ef,
+    alfa_ef1   = alfa_ef1,
+    alfa_efx   = alfa_efx,
+    alfa_prop  = alfa_prop,
+    alfa_prop1 = alfa_prop1,
+    alfa_propx = alfa_propx
+  )
+}
 
 ##########
 # proporciones
