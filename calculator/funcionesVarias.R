@@ -2783,18 +2783,19 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
 
   wrapper_0 = function(valoraciones){
     res = chau_tareas_feas(valoraciones)
-    res$carga_total = sum(diag(res$matriz_costo_final))
+    res$carga_total = max(diag(res$matriz_costo_final))
     res
   }
   wrapper_1 = function(valoraciones){
     res = repartoTareas(n_agentes, valoraciones)
     res$reparto = res$Art
-    res$carga_total = sum(res$llevan)
+    res$carga_total = max(res$llevan)
+    # res$alpha minimizarlo
     res
   }
   wrapper_2 = function(valoraciones){
     res = chau_tareas_feas2(valoraciones)
-    res$carga_total = sum(diag(res$matriz_costo_final))
+    res$carga_total = max(diag(res$matriz_costo_final))
     res
   }
 
@@ -2808,7 +2809,7 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
       totales[t, a] = mejor_de_n(wrappers[[a]], valoraciones, n_iter)
     }
 
-    ganador = which.min(totales[t, ])
+    ganador = which(totales[t, ]==min(totales[t, ]))
     victorias[ganador] = victorias[ganador] + 1
 
     cat(sprintf("Test %d/%d — burdens: %.4f | %.4f | %.4f — winner: %s\n",
@@ -2826,59 +2827,67 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
 }
 
 
-#valoraciones = matrix(c(seq(1,17,by=2)[-9],13,1:9,seq(1,25,by=3)),9,3)
-#valoraciones=matrix(c(1:10,2:11,3:12,4:13,5:14),10,5)
-#valoraciones=matrix(c(1:5,5:1,2:6,6:2,3:7,7:3,4:8,8:4,5:9,9:5),10,5)
-#valoraciones=proporciones(valoraciones)
-n_tareas=12
-n_agentes=3
-cotizacion=rdirichlet(1,rep(1,n_tareas))
-valoraciones=t(rdirichlet(n_agentes,as.vector(cotizacion)*1000))
+# #valoraciones = matrix(c(seq(1,17,by=2)[-9],13,1:9,seq(1,25,by=3)),9,3)
+# #valoraciones=matrix(c(1:10,2:11,3:12,4:13,5:14),10,5)
+# #valoraciones=matrix(c(1:5,5:1,2:6,6:2,3:7,7:3,4:8,8:4,5:9,9:5),10,5)
+# #valoraciones=proporciones(valoraciones)
+# n_tareas=12
+# n_agentes=3
+# cotizacion=rdirichlet(1,rep(1,n_tareas))
+# valoraciones=t(rdirichlet(n_agentes,as.vector(cotizacion)*1000))
 
-reparto_0=vector(mode="list",length=dim(valoraciones)[2])
-reparto_0[[1]]=1:dim(valoraciones)[1]
-reparto_elegido_0=reparto_0
-for(i in 1:1000){
-  reparto_aux=chau_tareas_feas(valoraciones)
-  if(comparacion_leximin_pp_tareas(reparto_elegido_0,reparto_aux$reparto,valoraciones)==2){
-    reparto_elegido_0=reparto_aux$reparto
-    valoracion_obtenida_0=reparto_aux$matriz_costo_final
-  }
-}
-#reparto_elegido_0
+# reparto_0=vector(mode="list",length=dim(valoraciones)[2])
+# reparto_0[[1]]=1:dim(valoraciones)[1]
+# reparto_elegido_0=reparto_0
+# for(i in 1:1000){
+#   reparto_aux=chau_tareas_feas(valoraciones)
+#   if(comparacion_leximin_pp_tareas(reparto_elegido_0,reparto_aux$reparto,valoraciones)==2){
+#     reparto_elegido_0=reparto_aux$reparto
+#     valoracion_obtenida_0=reparto_aux$matriz_costo_final
+#   }
+# }
+# #reparto_elegido_0
 
 
-reparto_1=vector(mode="list",length=dim(valoraciones)[2])
-reparto_1[[1]]=1:dim(valoraciones)[1]
-reparto_elegido_1=reparto_1
-for(i in 1:1000){
-  reparto_aux=repartoTareas(n_agentes,valoraciones)
-  if(comparacion_leximin_pp_tareas(reparto_elegido_1,reparto_aux$reparto,valoraciones)==2){
-    reparto_elegido_1=reparto_aux$Art
-    valoracion_obtenida_1=reparto_aux$llevan
-  }
-}
+# reparto_1=vector(mode="list",length=dim(valoraciones)[2])
+# reparto_1[[1]]=1:dim(valoraciones)[1]
+# reparto_elegido_1=reparto_1
+# for(i in 1:1000){
+#   reparto_aux=repartoTareas(n_agentes,valoraciones)
+#   if(comparacion_leximin_pp_tareas(reparto_elegido_1,reparto_aux$reparto,valoraciones)==2){
+#     reparto_elegido_1=reparto_aux$Art
+#     valoracion_obtenida_1=reparto_aux$llevan
+#   }
+# }
 
-reparto_2=vector(mode="list",length=dim(valoraciones)[2])
-reparto_2[[1]]=1:dim(valoraciones)[1]
-reparto_elegido_2=reparto_2
-for(i in 1:1000){
-  reparto_aux=chau_tareas_feas2(valoraciones)
-  if(comparacion_leximin_pp_tareas(reparto_elegido_2,reparto_aux$reparto,valoraciones)==2){
-    reparto_elegido_2=reparto_aux$reparto
-    valoracion_obtenida_2=reparto_aux$matriz_costo_final
-  }
-}
+# reparto_2=vector(mode="list",length=dim(valoraciones)[2])
+# reparto_2[[1]]=1:dim(valoraciones)[1]
+# reparto_elegido_2=reparto_2
+# for(i in 1:1000){
+#   reparto_aux=chau_tareas_feas2(valoraciones)
+#   if(comparacion_leximin_pp_tareas(reparto_elegido_2,reparto_aux$reparto,valoraciones)==2){
+#     reparto_elegido_2=reparto_aux$reparto
+#     valoracion_obtenida_2=reparto_aux$matriz_costo_final
+#   }
+# }
 
-cat("\n===== Burden per agent (best of 1000 runs each) =====\n")
-cat("chau_tareas_feas : ", round(diag(valoracion_obtenida_0), 4), "\n")
-cat("repartoTareas    : ", round(valoracion_obtenida_1, 4), "\n")
-cat("chau_tareas_feas2: ", round(diag(valoracion_obtenida_2), 4), "\n")
-cat("\n===== Total burden (lower = more efficient) =====\n")
-cat("chau_tareas_feas : ", round(sum(diag(valoracion_obtenida_0)), 4), "\n")
-cat("repartoTareas    : ", round(sum(valoracion_obtenida_1), 4), "\n")
-cat("chau_tareas_feas2: ", round(sum(diag(valoracion_obtenida_2)), 4), "\n")
-cat("\n===== Max burden (lower = more fair) =====\n")
-cat("chau_tareas_feas : ", round(max(diag(valoracion_obtenida_0)), 4), "\n")
-cat("repartoTareas    : ", round(max(valoracion_obtenida_1), 4), "\n")
-cat("chau_tareas_feas2: ", round(max(diag(valoracion_obtenida_2)), 4), "\n")
+# cat("\n===== Burden per agent (best of 1000 runs each) =====\n")
+# cat("chau_tareas_feas : ", round(diag(valoracion_obtenida_0), 4), "\n")
+# cat("repartoTareas    : ", round(valoracion_obtenida_1, 4), "\n")
+# cat("chau_tareas_feas2: ", round(diag(valoracion_obtenida_2), 4), "\n")
+# cat("\n===== Total burden (lower = more efficient) =====\n")
+# cat("chau_tareas_feas : ", round(sum(diag(valoracion_obtenida_0)), 4), "\n")
+# cat("repartoTareas    : ", round(sum(valoracion_obtenida_1), 4), "\n")
+# cat("chau_tareas_feas2: ", round(sum(diag(valoracion_obtenida_2)), 4), "\n")
+# cat("\n===== Max burden (lower = more fair) =====\n")
+# cat("chau_tareas_feas : ", round(max(diag(valoracion_obtenida_0)), 4), "\n")
+# cat("repartoTareas    : ", round(max(valoracion_obtenida_1), 4), "\n")
+# cat("chau_tareas_feas2: ", round(max(diag(valoracion_obtenida_2)), 4), "\n")
+
+
+
+# desarollar envidiaParaTareas asi calculamos el alpha de cada asignación
+# incorporar toptradingEnvyCycle a la simulación
+# agregar el calculo de los alphas en cada algoritmo
+# quedarse con el menor alpha. puede ser que el de LiptonTopTrading de mejor alpha.
+# chau_tareas_feas2 modificaciones: hacer una variante con verficiación del mejor vector de satisfacción. leer mail con otras mejoras
