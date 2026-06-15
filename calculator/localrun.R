@@ -1,4 +1,4 @@
-source("funcionesVarias.R")
+source("repartoTareas.R")
 
 # #valoraciones = matrix(c(seq(1,17,by=2)[-9],13,1:9,seq(1,25,by=3)),9,3)
 # #valoraciones=matrix(c(1:10,2:11,3:12,4:13,5:14),10,5)

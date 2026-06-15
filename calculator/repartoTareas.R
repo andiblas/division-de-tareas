@@ -9,6 +9,14 @@ library("gridExtra")
 library("partitions")
 library("combinat")
 
+entregaBien=function(reparto_orig,benef_recibe,benef_entrega,bien_entrega){
+  if(!(bien_entrega %in% reparto_orig[[benef_entrega]])){stop("no puede entregar ese bien ese beneficiario")}
+  reparto_nuevo=reparto_orig
+  reparto_nuevo[[benef_recibe]]=c(reparto_orig[[benef_recibe]],bien_entrega)
+  reparto_nuevo[[benef_entrega]]=setdiff(reparto_orig[[benef_entrega]],bien_entrega)
+  reparto_nuevo
+}
+
 ##############
 # función envidia
 ##############
@@ -220,8 +228,6 @@ valoracionReparto = function(reparto,valoraciones){
   return(S)
 }
 
-
-
 EFX_tareas = function(reparto, valoraciones){
   props=proporciones(valoraciones)
   llevan=valoracionReparto(reparto,valoraciones)
@@ -269,9 +275,6 @@ sum.comb <- function(n, k) {
   
   matrix(unlist(REC(n, k)), ncol = k, byrow = TRUE)
 }
-
-
-  
 
 repartoExhaustivoEFX2_tareas=function(n,k,valoraciones){
   a=sum.comb(n,k)
@@ -445,7 +448,6 @@ repartoTareas=function(n_trab,matriz_valoracion){
   return(list(Art=reparto_orig,llevan=lleva))
 }
 
-
 #* Calculate chore allocation using the Top-Trading Envy-Cycle Elimination algorithm
 #* (Bhaskar, Sricharan, Vaish 2022 — Algorithm 2)
 #*
@@ -568,7 +570,6 @@ repartoTareasTopTrading=function(n_trab, matriz_valoracion){
 
   return(list(Art=Art, llevan=lleva))
 }
-
 
 #* Calculate chore allocation using the Round Robin method
 #* @param dislikeMatrix A matrix where rows represent chores, columns represent agents, and values represent the dislike scores of agents for chores
@@ -699,9 +700,9 @@ chau_tareas_feas2 = function(valoraciones){
 
 
 comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
-  nombres = c("chau_tareas_feas", "repartoTareas", "chau_tareas_feas2")
-  victorias = setNames(integer(3), nombres)
-  totales = matrix(nrow=n_tests, ncol=3, dimnames=list(NULL, nombres))
+  nombres = c("chau_tareas_feas", "repartoTareas", "chau_tareas_feas2", "repartoTareasTopTrading")
+  victorias = setNames(integer(4), nombres)
+  totales = matrix(nrow=n_tests, ncol=4, dimnames=list(NULL, nombres))
 
   reparto_inicial = function(valoraciones){
     reparto = vector(mode="list", length=dim(valoraciones)[2])
@@ -709,7 +710,7 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     reparto
   }
 
-  mejor_de_n = function(algoritmo, valoraciones, n_iter){
+  mejor_leximin_de_n = function(algoritmo, valoraciones, n_iter){
     reparto_elegido = reparto_inicial(valoraciones)
     mejor_carga = Inf
     for(i in 1:n_iter){
@@ -722,8 +723,23 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     mejor_carga
   }
 
+  mejor_alfa_ef_de_n = function(algoritmo, valoraciones, n_iter){
+    reparto_elegido = reparto_inicial(valoraciones)
+    mejor_alfa_ef = Inf
+    for(i in 1:n_iter){
+      reparto_aux = algoritmo(valoraciones)
+      envidia_func=envidia2_tareas(valoraciones,reparto_aux$reparto)
+      if(envidia_func$alfa_ef < mejor_alfa_ef){
+        mejor_alfa_ef = envidia_func$alfa_ef
+        reparto_elegido = reparto_aux$reparto
+      }
+    }
+    mejor_alfa_ef
+  }
+
   wrapper_0 = function(valoraciones){
     res = chau_tareas_feas(valoraciones)
+    res$reparto = res$reparto
     res$carga_total = max(diag(res$matriz_costo_final))
     res
   }
@@ -731,45 +747,46 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     res = repartoTareas(n_agentes, valoraciones)
     res$reparto = res$Art
     res$carga_total = max(res$llevan)
-    # res$alpha minimizarlo
     res
   }
   wrapper_2 = function(valoraciones){
     res = chau_tareas_feas2(valoraciones)
+    res$reparto = res$reparto
     res$carga_total = max(diag(res$matriz_costo_final))
     res
   }
+  wrapper_3 = function(valoraciones){
+    res = repartoTareasTopTrading(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
 
-  wrappers = list(wrapper_0, wrapper_1, wrapper_2)
+  wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3)
 
   for(t in 1:n_tests){
     cotizacion = rdirichlet(1, rep(1, n_tareas))
     valoraciones = t(rdirichlet(n_agentes, as.vector(cotizacion)*1000))
 
-    for(a in 1:3){
-      totales[t, a] = mejor_de_n(wrappers[[a]], valoraciones, n_iter)
+    for(a in 1:4){
+      # aca podemos optar por cambiar el criterio de elección de reparto
+      # totales[t, a] = mejor_leximin_de_n(wrappers[[a]], valoraciones, n_iter)
+      totales[t, a] = mejor_alfa_ef_de_n(wrappers[[a]], valoraciones, n_iter)
     }
 
     ganador = which(totales[t, ]==min(totales[t, ]))
     victorias[ganador] = victorias[ganador] + 1
 
-    cat(sprintf("Test %d/%d — burdens: %.4f | %.4f | %.4f — winner: %s\n",
-                t, n_tests, totales[t,1], totales[t,2], totales[t,3], nombres[ganador]))
+    cat(sprintf("Test %d/%d — burdens: %.4f | %.4f | %.4f | %.4f — winner: %s\n",
+                t, n_tests, totales[t,1], totales[t,2], totales[t,3], totales[t,4], nombres[ganador]))
   }
 
   cat("\n===== Results =====\n")
-  for(a in 1:3){
-    cat(sprintf("%-20s  wins: %d/%d (%.1f%%)  avg burden: %.4f\n",
+  for(a in 1:4){
+    cat(sprintf("%-30s  wins: %d/%d (%.1f%%)  avg burden: %.4f\n",
                 nombres[a], victorias[a], n_tests,
                 100*victorias[a]/n_tests, mean(totales[,a])))
   }
 
   list(victorias=victorias, totales=totales)
 }
-
-
-# desarollar envidiaParaTareas asi calculamos el alpha de cada asignación
-# incorporar toptradingEnvyCycle a la simulación
-# agregar el calculo de los alphas en cada algoritmo
-# quedarse con el menor alpha. puede ser que el de LiptonTopTrading de mejor alpha.
-# chau_tareas_feas2 modificaciones: hacer una variante con verficiación del mejor vector de satisfacción. leer mail con otras mejoras
