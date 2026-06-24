@@ -67,10 +67,12 @@ envidia2=function(valoraciones,reparto){
         alfa_ef_mat[i,j]=S[i,i]/S[i,j]
       }
       #ahora alfa_efx_mat
-      if(length(reparto[[j]])==0){
-        denom1_ij=0}else{
-          denom1_ij=S[i,j]-min(props[reparto[[j]],i])
-        }
+      if(length(reparto[[j]])==0) {
+        denom1_ij=0
+      }
+      else {
+        denom1_ij=S[i,j]-min(props[reparto[[j]],i])
+      }
       if((S[i,i]==0)&(denom1_ij==0)){
         alfa_efx_mat[i,j]=1
       }else{
