@@ -730,7 +730,7 @@ chau_tareas_feas = function(valoraciones){
   list(reparto=reparto,matriz_costo_final=matriz_costo_final)
 }
 
-chau_tareas_feas2 = function(valoraciones){
+chauTareasFeas2 = function(valoraciones){
   M=valoraciones
   n_tareas=dim(M)[1]
   n_agentes=dim(M)[2]
@@ -770,10 +770,86 @@ chau_tareas_feas2 = function(valoraciones){
 }
 
 
+chauTareasFeas2Random = function(valoraciones){
+  M=valoraciones
+  n_tareas=dim(M)[1]
+  n_agentes=dim(M)[2]
+  M=proporciones(M)
+
+  sorteo=function(candidatos){
+    candidatos[sample.int(length(candidatos),1)]
+  }
+
+  agente_mas_cargado=function(reparto){
+    costos=diag(valoracionReparto(reparto,M))
+    sorteo(which(costos==max(costos)))
+  }
+
+  tarea_mas_pesada=function(restantes, agente){
+    valoracion_restantes=M[restantes,agente]
+    restantes[sorteo(which(valoracion_restantes==max(valoracion_restantes)))]
+  }
+
+  reparto = vector(mode="list",length=n_agentes)
+  restantes=1:n_tareas
+  while(length(restantes)>0){
+    i_star=agente_mas_cargado(reparto)
+    tarea_elegida=tarea_mas_pesada(restantes, i_star)
+    j_star=sorteo((1:n_agentes)[-i_star])
+    reparto[[j_star]]=c(reparto[[j_star]],tarea_elegida)
+    restantes=setdiff(restantes,tarea_elegida)
+  }
+  matriz_costo_final=valoracionReparto(reparto,M)
+  list(reparto=reparto,matriz_costo_final=matriz_costo_final)
+}
+
+chauTareasFeas2BestAlfaEf = function(valoraciones){
+  n_tareas = dim(valoraciones)[1]
+  n_agentes = dim(valoraciones)[2]
+  M = proporciones(valoraciones)
+
+  sorteo = function(candidatos){
+    candidatos[sample.int(length(candidatos), 1)]
+  }
+
+  agente_mas_cargado = function(reparto){
+    costos = diag(valoracionReparto(reparto, M))
+    sorteo(which(costos == max(costos)))
+  }
+
+  tarea_mas_pesada = function(restantes, agente){
+    valoracion_restantes = M[restantes, agente]
+    restantes[sorteo(which(valoracion_restantes == max(valoracion_restantes)))]
+  }
+
+  reparto = vector(mode="list", length=n_agentes)
+  restantes = 1:n_tareas
+  while(length(restantes) > 0){
+    i_star = agente_mas_cargado(reparto)
+    tarea_elegida = tarea_mas_pesada(restantes, i_star)
+    postulantes = (1:n_agentes)[-i_star]
+    alfa_ef_vals = sapply(postulantes, function(j){
+      reparto_tentativo = reparto
+      reparto_tentativo[[j]] = c(reparto[[j]], tarea_elegida)
+      envidia2_tareas(valoraciones, reparto_tentativo)$alfa_ef
+    })
+    mejor_alfa_ef = min(alfa_ef_vals)
+    j_star = sorteo(postulantes[alfa_ef_vals == mejor_alfa_ef])
+    reparto[[j_star]] = c(reparto[[j_star]], tarea_elegida)
+    restantes = setdiff(restantes, tarea_elegida)
+  }
+  matriz_costo_final = valoracionReparto(reparto, M)
+  list(reparto=reparto, matriz_costo_final=matriz_costo_final)
+}
+
 comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
-  nombres = c("chau_tareas_feas", "repartoTareas", "chau_tareas_feas2", "repartoTareasTopTrading")
-  victorias = setNames(integer(4), nombres)
-  totales = matrix(nrow=n_tests, ncol=4, dimnames=list(NULL, nombres))
+  nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
+              "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
+              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf")
+  victorias_alfa_ef = setNames(integer(8), nombres)
+  victorias_leximin = setNames(integer(8), nombres)
+  totales_alfa_ef   = matrix(nrow=n_tests, ncol=8, dimnames=list(NULL, nombres))
+  totales_leximin   = matrix(nrow=n_tests, ncol=8, dimnames=list(NULL, nombres))
 
   reparto_inicial = function(valoraciones){
     reparto = vector(mode="list", length=dim(valoraciones)[2])
@@ -781,31 +857,28 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     reparto
   }
 
-  mejor_leximin_de_n = function(algoritmo, valoraciones, n_iter){
-    reparto_elegido = reparto_inicial(valoraciones)
-    mejor_carga = Inf
-    for(i in 1:n_iter){
-      reparto_aux = algoritmo(valoraciones)
-      if(comparacion_leximin_pp_tareas(reparto_elegido, reparto_aux$reparto, valoraciones)==2){
-        reparto_elegido = reparto_aux$reparto
-        mejor_carga = reparto_aux$carga_total
-      }
-    }
-    mejor_carga
-  }
+  mejores_de_n = function(algoritmo, valoraciones, n_iter){
+    reparto_elegido_alfa    = reparto_inicial(valoraciones)
+    reparto_elegido_leximin = reparto_inicial(valoraciones)
+    mejor_alfa_ef           = Inf
+    mejor_carga_leximin     = Inf
 
-  mejor_alfa_ef_de_n = function(algoritmo, valoraciones, n_iter){
-    reparto_elegido = reparto_inicial(valoraciones)
-    mejor_alfa_ef = Inf
     for(i in 1:n_iter){
-      reparto_aux = algoritmo(valoraciones)
-      envidia_func=envidia2_tareas(valoraciones,reparto_aux$reparto)
+      reparto_aux  = algoritmo(valoraciones)
+      envidia_func = envidia2_tareas(valoraciones, reparto_aux$reparto)
+
       if(envidia_func$alfa_ef < mejor_alfa_ef){
-        mejor_alfa_ef = envidia_func$alfa_ef
-        reparto_elegido = reparto_aux$reparto
+        mejor_alfa_ef        = envidia_func$alfa_ef
+        reparto_elegido_alfa = reparto_aux$reparto
+      }
+
+      if(comparacion_leximin_pp_tareas(reparto_elegido_leximin, reparto_aux$reparto, valoraciones) == 2){
+        reparto_elegido_leximin = reparto_aux$reparto
+        mejor_carga_leximin     = reparto_aux$carga_total
       }
     }
-    mejor_alfa_ef
+
+    list(alfa_ef = mejor_alfa_ef, carga_leximin = mejor_carga_leximin)
   }
 
   wrapper_0 = function(valoraciones){
@@ -821,7 +894,7 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     res
   }
   wrapper_2 = function(valoraciones){
-    res = chau_tareas_feas2(valoraciones)
+    res = chauTareasFeas2(valoraciones)
     res$reparto = res$reparto
     res$carga_total = max(diag(res$matriz_costo_final))
     res
@@ -832,32 +905,81 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     res$carga_total = max(res$llevan)
     res
   }
+  wrapper_4 = function(valoraciones){
+    res = repartoTareasTopTradingRandom(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_5 = function(valoraciones){
+    res = repartoTareasTopTradingRandomLastEnvyCycle(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_6 = function(valoraciones){
+    res = chauTareasFeas2Random(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_7 = function(valoraciones){
+    res = chauTareasFeas2BestAlfaEf(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
 
-  wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3)
+  wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3, wrapper_4, wrapper_5, wrapper_6, wrapper_7)
 
   for(t in 1:n_tests){
     cotizacion = rdirichlet(1, rep(1, n_tareas))
     valoraciones = t(rdirichlet(n_agentes, as.vector(cotizacion)*1000))
 
-    for(a in 1:4){
-      # aca podemos optar por cambiar el criterio de elección de reparto
-      # totales[t, a] = mejor_leximin_de_n(wrappers[[a]], valoraciones, n_iter)
-      totales[t, a] = mejor_alfa_ef_de_n(wrappers[[a]], valoraciones, n_iter)
+    for(a in 1:8){
+      res = mejores_de_n(wrappers[[a]], valoraciones, n_iter)
+      # almacenamos el ganador del alfa ef
+      totales_alfa_ef[t, a] = res$alfa_ef
+      # almacenamos el ganador de leximin
+      totales_leximin[t, a] = res$carga_leximin
     }
 
-    ganador = which(totales[t, ]==min(totales[t, ]))
-    victorias[ganador] = victorias[ganador] + 1
+    ganador_alfa_ef = which(totales_alfa_ef[t, ] == min(totales_alfa_ef[t, ]))
+    victorias_alfa_ef[ganador_alfa_ef] = victorias_alfa_ef[ganador_alfa_ef] + 1
 
-    cat(sprintf("Test %d/%d — burdens: %.4f | %.4f | %.4f | %.4f — winner: %s\n",
-                t, n_tests, totales[t,1], totales[t,2], totales[t,3], totales[t,4], nombres[ganador]))
+    ganador_leximin = which(totales_leximin[t, ] == min(totales_leximin[t, ]))
+    victorias_leximin[ganador_leximin] = victorias_leximin[ganador_leximin] + 1
+
+    cat(sprintf("Test %d/%d\talfa_ef: %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f — winner: %s\n",
+                t, n_tests, totales_alfa_ef[t,1], totales_alfa_ef[t,2], totales_alfa_ef[t,3],
+                totales_alfa_ef[t,4], totales_alfa_ef[t,5], totales_alfa_ef[t,6],
+                totales_alfa_ef[t,7], totales_alfa_ef[t,8],
+                paste(nombres[ganador_alfa_ef], collapse=", ")))
+    cat(sprintf("\t\tleximin: %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f — winner: %s\n",
+                totales_leximin[t,1], totales_leximin[t,2], totales_leximin[t,3],
+                totales_leximin[t,4], totales_leximin[t,5], totales_leximin[t,6],
+                totales_leximin[t,7], totales_leximin[t,8],
+                paste(nombres[ganador_leximin], collapse=", ")))
   }
 
-  cat("\n===== Results =====\n")
-  for(a in 1:4){
-    cat(sprintf("%-30s  wins: %d/%d (%.1f%%)  avg burden: %.4f\n",
-                nombres[a], victorias[a], n_tests,
-                100*victorias[a]/n_tests, mean(totales[,a])))
+  cat("\n===== Results (alfa_ef) =====\n")
+  for(a in 1:8){
+    cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg alfa_ef: %.4f\n",
+                nombres[a], victorias_alfa_ef[a], n_tests,
+                100*victorias_alfa_ef[a]/n_tests, mean(totales_alfa_ef[,a])))
   }
 
-  list(victorias=victorias, totales=totales)
+  cat("\n===== Results (leximin) =====\n")
+  for(a in 1:8){
+    cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg carga leximin: %.4f\n",
+                nombres[a], victorias_leximin[a], n_tests,
+                100*victorias_leximin[a]/n_tests, mean(totales_leximin[,a])))
+  }
+
+  list(
+    victorias_alfa_ef = victorias_alfa_ef,
+    totales_alfa_ef   = totales_alfa_ef,
+    victorias_leximin = victorias_leximin,
+    totales_leximin   = totales_leximin
+  )
 }

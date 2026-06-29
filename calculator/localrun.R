@@ -65,4 +65,4 @@ source("repartoTareas.R")
 # cat("chau_tareas_feas2: ", round(max(diag(valoracion_obtenida_2)), 4), "\n")
 
 
-comparar_algoritmos(10)
+comparar_algoritmos(50)
