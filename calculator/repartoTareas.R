@@ -842,7 +842,7 @@ chauTareasFeas2BestAlfaEf = function(valoraciones){
   list(reparto=reparto, matriz_costo_final=matriz_costo_final)
 }
 
-comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
+comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000, segundos=3){
   nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
               "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
               "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf")
@@ -864,6 +864,31 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     mejor_carga_leximin     = Inf
 
     for(i in 1:n_iter){
+      reparto_aux  = algoritmo(valoraciones)
+      envidia_func = envidia2_tareas(valoraciones, reparto_aux$reparto)
+
+      if(envidia_func$alfa_ef < mejor_alfa_ef){
+        mejor_alfa_ef        = envidia_func$alfa_ef
+        reparto_elegido_alfa = reparto_aux$reparto
+      }
+
+      if(comparacion_leximin_pp_tareas(reparto_elegido_leximin, reparto_aux$reparto, valoraciones) == 2){
+        reparto_elegido_leximin = reparto_aux$reparto
+        mejor_carga_leximin     = reparto_aux$carga_total
+      }
+    }
+
+    list(alfa_ef = mejor_alfa_ef, carga_leximin = mejor_carga_leximin)
+  }
+
+  mejores_n_segundos = function(algoritmo, valoraciones, segundos){
+    reparto_elegido_alfa    = reparto_inicial(valoraciones)
+    reparto_elegido_leximin = reparto_inicial(valoraciones)
+    mejor_alfa_ef           = Inf
+    mejor_carga_leximin     = Inf
+
+    tiempo_inicio = Sys.time()
+    while(as.numeric(difftime(Sys.time(), tiempo_inicio, units = "secs")) < segundos){
       reparto_aux  = algoritmo(valoraciones)
       envidia_func = envidia2_tareas(valoraciones, reparto_aux$reparto)
 
@@ -937,7 +962,11 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000){
     valoraciones = t(rdirichlet(n_agentes, as.vector(cotizacion)*1000))
 
     for(a in 1:8){
-      res = mejores_de_n(wrappers[[a]], valoraciones, n_iter)
+      # ejecutamos el algoritmo N cantidad de veces
+      # res = mejores_de_n(wrappers[[a]], valoraciones, n_iter)
+      # ejecutamos el algoritmo la mayor cantidad de veces que podamos en N segundos
+      res = mejores_n_segundos(wrappers[[a]], valoraciones, segundos)
+
       # almacenamos el ganador del alfa ef
       totales_alfa_ef[t, a] = res$alfa_ef
       # almacenamos el ganador de leximin
