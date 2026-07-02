@@ -769,7 +769,9 @@ chauTareasFeas2 = function(valoraciones){
   list(reparto=reparto,matriz_costo_final=matriz_costo_final)
 }
 
-
+# chauTareasFeas2Random es la versión de ChauTareasFeas2
+# en la cual el criterio de selección del agente a la que se
+# le asigna la tarea es al azar
 chauTareasFeas2Random = function(valoraciones){
   M=valoraciones
   n_tareas=dim(M)[1]
@@ -803,6 +805,10 @@ chauTareasFeas2Random = function(valoraciones){
   list(reparto=reparto,matriz_costo_final=matriz_costo_final)
 }
 
+# chauTareasFeas2BestAlfaEf es la versión de ChauTareasFeas2
+# en la cual el criterio de selección del agente a la que se
+# le asigna la tarea es mediante la busqueda del mejor leximin
+# entre los postulantes.
 chauTareasFeas2BestAlfaEf = function(valoraciones){
   n_tareas = dim(valoraciones)[1]
   n_agentes = dim(valoraciones)[2]
