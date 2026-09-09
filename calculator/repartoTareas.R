@@ -336,6 +336,165 @@ repartoExhaustivoEFX2_tareas=function(n,k,valoraciones){
   return(list(alfa=alfaResult,repartido=repartidoResult,envidiaMaxima=envidiaMaxima,valoracion=valoracion))
 }
 
+##################
+# generarRepartos
+##################
+# Espejo de la generación de repartos que hace repartoExhaustivoTareas, aislada
+# para poder inspeccionarla y testearla. La lógica es idéntica; se duplica a
+# propósito para no tocar el exhaustivo.
+#
+# salida: lista de longitud n_agentes^n_tareas; cada elemento es un reparto,
+#         es decir una lista de n_agentes vectores de índices de tareas.
+generarRepartos = function(n_tareas, n_agentes){
+  n = n_tareas
+  k = n_agentes
+
+  a = sum.comb(n, k)
+  a = a[!apply(a, 1, is.unsorted), , drop=FALSE]
+  largo = dim(a)[1]
+  permut = unclass(perms(k))
+
+  repartos = list()
+
+  for(i in 1:largo){
+    combinaciones = setparts(a[i,])
+    cantCombi = dim(combinaciones)[2]
+
+    nz = sum(a[i,] > 0)
+    asign = permut
+    asign[asign > nz] = 0
+    asign = asign[, !duplicated(t(asign)), drop=FALSE]
+    cantAsign = dim(asign)[2]
+
+    for(j in 1:cantCombi){
+      for(s in 1:cantAsign){
+        repartido = vector("list", k)
+        for(l in 1:k){
+          repartido[[l]] = which(combinaciones[,j] == asign[l,s])
+        }
+        repartos[[length(repartos) + 1]] = repartido
+      }
+    }
+  }
+
+  repartos
+}
+
+##################
+# repartoExhaustivoTareas
+##################
+# Recorre TODOS los repartos posibles de las tareas entre los agentes y se queda con:
+#   - el reparto leximin-optimo
+#   - el reparto de maximo bienestar Nash
+#   - por cada una de las 6 alfas, el mejor valor alcanzable (la "verdad verdadera").
+#     Cada alfa se optimiza por separado, asi que pueden venir de repartos distintos.
+#
+# Ojo con la convencion: en tareas alfa > 1 es envidia, envidia2_tareas agrega con
+# max, y por lo tanto aca MINIMIZAMOS las alfas. Es al reves del repartoExhaustivo_v2
+# de bienes, que las maximiza.
+#
+# entrada
+# valoraciones: matriz n_tareas x n_agentes, valoraciones[t,i] es lo que le cuesta
+#               la tarea t al agente i
+repartoExhaustivoTareas = function(valoraciones){
+  n = dim(valoraciones)[1]  # cantidad de tareas
+  k = dim(valoraciones)[2]  # cantidad de agentes
+
+  # Perfiles de tamaños ordenados: setparts ya genera los bloques sin orden, y las
+  # perms de abajo les devuelven la identidad de agente, asi que con los perfiles
+  # canonicos alcanza para recorrer los k^n repartos exactamente una vez.
+  a = sum.comb(n, k)
+  a = a[!apply(a, 1, is.unsorted), , drop=FALSE]
+  largo = dim(a)[1]
+  # unclass porque perms() devuelve un objeto "partition" y sobre esa clase
+  # duplicated() compara elemento a elemento en vez de por columna.
+  permut = unclass(perms(k))
+
+  formas = 0
+
+  reparto_min_leximin = reparto_max_nash = NULL
+  nash_max = -Inf
+
+  # Las 6 alfas en el mismo orden en que las reporta la simulacion.
+  alfas_nombres = c("alfa_ef", "alfa_ef1", "alfa_efx", "alfa_prop", "alfa_prop1", "alfa_propx")
+  alfas_min     = setNames(rep(Inf, 6), alfas_nombres)
+  alfas_reparto = setNames(vector("list", 6), alfas_nombres)
+
+  for(i in 1:largo){
+    combinaciones = setparts(a[i,])
+    cantCombi = dim(combinaciones)[2]
+
+    # setparts descarta los bloques vacíos: para un perfil con ceros devuelve
+    # etiquetas 1..nz y las etiquetas > nz no aparecen nunca. Entonces las
+    # permutaciones que sólo difieren en qué agente recibe una etiqueta
+    # inexistente generan el mismo reparto. Las mapeamos a 0 (bundle vacío) y
+    # deduplicamos, si no contaríamos de más los repartos con dos o más agentes
+    # sin tareas.
+    nz = sum(a[i,] > 0)
+    asign = permut
+    asign[asign > nz] = 0
+    asign = asign[, !duplicated(t(asign)), drop=FALSE]
+    cantAsign = dim(asign)[2]
+
+    for(j in 1:cantCombi){
+      for(s in 1:cantAsign){
+        repartido = vector("list", k)
+        formas = formas + 1
+        for(l in 1:k){
+          repartido[[l]] = which(combinaciones[,j] == asign[l,s])
+        }
+
+        # Una sola pasada: envidia2_tareas devuelve las 6 alfas y el Nash juntos.
+        metricas = envidia2_tareas(valoraciones, repartido)
+
+        # Las 6 alfas, cada una por su cuenta. Ante empate nos quedamos con el
+        # reparto de mejor leximin.
+        for(m in alfas_nombres){
+          alfa_aux = metricas[[m]]
+          if(alfa_aux < alfas_min[m]){
+            alfas_min[m] = alfa_aux
+            alfas_reparto[[m]] = repartido
+          } else if(alfa_aux == alfas_min[m] &&
+                    comparacion_leximin_pp_tareas(alfas_reparto[[m]], repartido, valoraciones) == 2){
+            alfas_reparto[[m]] = repartido
+          }
+        }
+
+        # Campeon leximin
+        if(is.null(reparto_min_leximin) ||
+           comparacion_leximin_pp_tareas(reparto_min_leximin, repartido, valoraciones) == 2){
+          reparto_min_leximin = repartido
+        }
+
+        # Campeon Nash: producto de (1 - carga propia), mas alto es mejor.
+        if(metricas$bienestar_nash > nash_max){
+          nash_max = metricas$bienestar_nash
+          reparto_max_nash = repartido
+        }
+      }
+    }
+  }
+
+  list(
+    reparto_min_leximin = reparto_min_leximin,
+    reparto_max_nash    = reparto_max_nash,
+    nash_max            = nash_max,
+    alfa_ef_min         = unname(alfas_min["alfa_ef"]),
+    alfa_ef1_min        = unname(alfas_min["alfa_ef1"]),
+    alfa_efx_min        = unname(alfas_min["alfa_efx"]),
+    alfa_prop_min       = unname(alfas_min["alfa_prop"]),
+    alfa_prop1_min      = unname(alfas_min["alfa_prop1"]),
+    alfa_propx_min      = unname(alfas_min["alfa_propx"]),
+    reparto_alfa_ef_min     = alfas_reparto[["alfa_ef"]],
+    reparto_alfa_ef1_min    = alfas_reparto[["alfa_ef1"]],
+    reparto_alfa_efx_min    = alfas_reparto[["alfa_efx"]],
+    reparto_alfa_prop_min   = alfas_reparto[["alfa_prop"]],
+    reparto_alfa_prop1_min  = alfas_reparto[["alfa_prop1"]],
+    reparto_alfa_propx_min  = alfas_reparto[["alfa_propx"]],
+    formas = formas
+  )
+}
+
 comparacion_leximin_pp_tareas=function(reparto1,reparto2,valoraciones){
   S1=valoracionReparto(reparto1,valoraciones)
   S2=valoracionReparto(reparto2,valoraciones)
@@ -1444,6 +1603,407 @@ simulacionTareas = function(LoteInicio, LoteFin,
     resultados         = resultados,
     victorias_alfa_ef  = victorias_alfa_ef,
     victorias_leximin  = victorias_leximin,
+    archivo_resultados = archivo_resultados,
+    archivo_instancias = archivo_instancias
+  )
+}
+
+# Version serial de simulacionTareas, tal como estaba antes de paralelizarla.
+# Se conserva para poder contrastar a mano los archivos de resultados y de
+# instancias contra los que produce la version con mclapply.
+simulacionTareasSinParallel = function(LoteInicio, LoteFin,
+                            CantidadDeInstanciasPorCotizacion,
+                            CantidadDeSegundosPorAlgoritmo,
+                            Lambda, Agentes, Tareas){
+
+  n_agentes = Agentes
+  n_tareas  = Tareas
+
+  nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
+              "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
+              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf")
+  abrev   = c("chau", "mio", "chau2", "tt", "tt_rnd", "tt_rnd_lec", "chau2_rnd", "chau2_alfaef")
+
+
+  num_lotes = LoteFin - LoteInicio + 1
+  num_filas = num_lotes * CantidadDeInstanciasPorCotizacion
+
+  victorias_alfa_ef         = setNames(integer(8), nombres)
+  victorias_leximin         = setNames(integer(8), nombres)
+  totales_alfa_ef           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_ef1          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_efx          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_prop         = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_prop1        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_propx        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_leximin           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_bienestar_nash    = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_iters      = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  lote_col          = vector(, length=num_filas)
+  caso_col          = vector(, length=num_filas)
+
+  reparto_inicial = function(valoraciones){
+    reparto = vector(mode="list", length=dim(valoraciones)[2])
+    reparto[[1]] = 1:dim(valoraciones)[1]
+    reparto
+  }
+
+  # Corremos el algoritmo recibido por una cantidad de segundos
+  # y nos quedamos con el reparto con el mejor Leximin.
+  mejores_n_segundos = function(algoritmo, valoraciones, segundos){
+    reparto_elegido_alfa    = reparto_inicial(valoraciones)
+    reparto_elegido_leximin = reparto_inicial(valoraciones)
+    iteraciones             = 0
+
+    tiempo_inicio = Sys.time()
+    while(as.numeric(difftime(Sys.time(), tiempo_inicio, units = "secs")) < segundos){
+      iteraciones  = iteraciones + 1
+      reparto_aux  = algoritmo(valoraciones)
+
+      if(iteraciones == 1 ||
+         comparacion_leximin_pp_tareas(reparto_elegido_leximin, reparto_aux$reparto, valoraciones) == 2){
+        reparto_elegido_leximin = reparto_aux$reparto
+      }
+    }
+
+    # La carga la sacamos del reparto ganador en vez de arrastrarla por el loop:
+    # así no dependemos de que cada wrapper setee carga_total.
+    carga_leximin = max(diag(valoracionReparto(reparto_elegido_leximin, valoraciones)))
+    envidia_func = envidia2_tareas(valoraciones, reparto_elegido_leximin)
+
+    list(
+      alfa_ef       = envidia_func$alfa_ef,
+      alfa_ef1      = envidia_func$alfa_ef1,
+      alfa_efx      = envidia_func$alfa_efx,
+      alfa_prop     = envidia_func$alfa_prop,
+      alfa_prop1    = envidia_func$alfa_prop1,
+      alfa_propx    = envidia_func$alfa_propx,
+      bienestar_nash = envidia_func$bienestar_nash,
+      carga_leximin = carga_leximin,
+      iteraciones   = iteraciones
+    )
+  }
+
+  wrapper_0 = function(valoraciones){
+    res = chau_tareas_feas(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_1 = function(valoraciones){
+    res = repartoTareas(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_2 = function(valoraciones){
+    res = chauTareasFeas2(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_3 = function(valoraciones){
+    res = repartoTareasTopTrading(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_4 = function(valoraciones){
+    res = repartoTareasTopTradingRandom(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_5 = function(valoraciones){
+    res = repartoTareasTopTradingRandomLastEnvyCycle(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_6 = function(valoraciones){
+    res = chauTareasFeas2Random(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_7 = function(valoraciones){
+    res = chauTareasFeas2BestAlfaEf(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+
+  wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3, wrapper_4, wrapper_5, wrapper_6, wrapper_7)
+
+  # --- Archivos de salida ---
+  sufijo = paste("_", n_tareas, "_tareas_", n_agentes, "_agen_",
+                 "nrep1i_", LoteInicio, "_nrep1f_", LoteFin,
+                 "_ninst_", CantidadDeInstanciasPorCotizacion,
+                 "_lambda_", Lambda, ".txt", sep="")
+  archivo_resultados = paste("sin_parallel_reparto_TAREAS", sufijo, sep="")
+  archivo_instancias = paste("sin_parallel_instancia_TAREAS", sufijo, sep="")
+
+  columnas  = c("rep", "caso",
+                paste("alfa_ef_",    abrev, sep=""),
+                paste("alfa_ef1_",   abrev, sep=""),
+                paste("alfa_efx_",   abrev, sep=""),
+                paste("alfa_prop_",  abrev, sep=""),
+                paste("alfa_prop1_", abrev, sep=""),
+                paste("alfa_propx_", abrev, sep=""),
+                paste("bienNash_",   abrev, sep=""),
+                paste("leximin_",    abrev, sep=""),
+                paste("iters_",      abrev, sep=""))
+  columnas2 = c("rep", "caso", rep(1:n_tareas, n_agentes))
+  write.table(t(columnas),  file = archivo_resultados, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+  write.table(t(columnas2), file = archivo_instancias, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+  # --- Simulación ---
+  # El alfa de la Dirichlet que genera la cotización no es 1: usamos el c
+  # calibrado para esta tupla (agentes, tareas) de la tabla valores_c.
+  caso_c = which(valores_c$agentes == n_agentes & valores_c$tareas == n_tareas)
+  if(length(caso_c) == 0){
+    stop(sprintf("valores_c no tiene un c para %d agentes y %d tareas", n_agentes, n_tareas))
+  }
+  valor_c = valores_c$c[caso_c]
+  alfaVec = rep(valor_c, n_tareas)
+  fila = 0
+
+  for(i in LoteInicio:LoteFin){
+    set.seed(500+i)
+    X1 = rdirichlet(1, alfaVec)   # cotización del lote
+
+    for(j in 1:CantidadDeInstanciasPorCotizacion){
+      set.seed(1000+CantidadDeInstanciasPorCotizacion*i+j)
+      valoraciones = t(rdirichlet(n_agentes, Lambda*(as.vector(X1))))   # instancia
+
+      fila = fila + 1
+      lote_col[fila] = i
+      caso_col[fila] = j
+
+      for(a in 1:8){
+        # ejecutamos cada algoritmo la mayor cantidad de veces que podamos en N segundos
+        res = mejores_n_segundos(wrappers[[a]], valoraciones, CantidadDeSegundosPorAlgoritmo)
+
+        totales_alfa_ef[fila, a]    = res$alfa_ef
+        totales_alfa_ef1[fila, a]   = res$alfa_ef1
+        totales_alfa_efx[fila, a]   = res$alfa_efx
+        totales_alfa_prop[fila, a]  = res$alfa_prop
+        totales_alfa_prop1[fila, a] = res$alfa_prop1
+        totales_alfa_propx[fila, a] = res$alfa_propx
+        totales_bienestar_nash[fila, a]    = res$bienestar_nash
+        totales_leximin[fila, a]    = res$carga_leximin
+        totales_iters[fila, a]      = res$iteraciones
+      }
+
+      ganador_alfa_ef = which(totales_alfa_ef[fila, ] == min(totales_alfa_ef[fila, ]))
+      victorias_alfa_ef[ganador_alfa_ef] = victorias_alfa_ef[ganador_alfa_ef] + 1
+
+      ganador_leximin = which(totales_leximin[fila, ] == min(totales_leximin[fila, ]))
+      victorias_leximin[ganador_leximin] = victorias_leximin[ganador_leximin] + 1
+
+      # --- Escritura en archivo ---
+      guardo      = c(i, j,
+                      totales_alfa_ef[fila, ], totales_alfa_ef1[fila, ], totales_alfa_efx[fila, ],
+                      totales_alfa_prop[fila, ], totales_alfa_prop1[fila, ], totales_alfa_propx[fila, ],
+                      totales_bienestar_nash[fila, ], totales_leximin[fila, ], totales_iters[fila, ])
+      guardo_inst = c(i, j, as.vector(valoraciones))
+
+      write.table(t(guardo),      file = archivo_resultados, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+      write.table(t(guardo_inst), file = archivo_instancias, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+
+      cat(sprintf("%d_agentes_%d_tareas_lambda_%s_lote_%d_caso_%d (%d/%d)\n",
+                  n_agentes, n_tareas, format(Lambda), i, j, fila, num_filas))
+      cat(sprintf("\talfa_ef: %s — ganador: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_ef[fila, ]), collapse=" | "),
+                  paste(nombres[ganador_alfa_ef], collapse=", ")))
+      cat(sprintf("\talfa_ef1: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_ef1[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_efx: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_efx[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_prop: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_prop[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_prop1: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_prop1[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_propx: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_propx[fila, ]), collapse=" | ")))
+      cat(sprintf("\tbienNash: %s\n",
+                  paste(sprintf("%.4f", totales_bienestar_nash[fila, ]), collapse=" | ")))
+      cat(sprintf("\tleximin: %s — ganador: %s\n",
+                  paste(sprintf("%.4f", totales_leximin[fila, ]), collapse=" | "),
+                  paste(nombres[ganador_leximin], collapse=", ")))
+    }
+  }
+
+  cat("\n===== Results (alfa_ef) =====\n")
+  for(a in 1:8){
+    cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg alfa_ef: %.4f\n",
+                nombres[a], victorias_alfa_ef[a], num_filas,
+                100*victorias_alfa_ef[a]/num_filas, mean(totales_alfa_ef[,a])))
+  }
+
+  cat("\n===== Results (leximin) =====\n")
+  for(a in 1:8){
+    cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg carga leximin: %.4f\n",
+                nombres[a], victorias_leximin[a], num_filas,
+                100*victorias_leximin[a]/num_filas, mean(totales_leximin[,a])))
+  }
+
+  cat(sprintf("\nResultados: %s\nInstancias: %s\n", archivo_resultados, archivo_instancias))
+
+  resultados = data.frame(rep = lote_col, caso = caso_col)
+  resultados[paste("alfa_ef_",    abrev, sep="")] = totales_alfa_ef
+  resultados[paste("alfa_ef1_",   abrev, sep="")] = totales_alfa_ef1
+  resultados[paste("alfa_efx_",   abrev, sep="")] = totales_alfa_efx
+  resultados[paste("alfa_prop_",  abrev, sep="")] = totales_alfa_prop
+  resultados[paste("alfa_prop1_", abrev, sep="")] = totales_alfa_prop1
+  resultados[paste("alfa_propx_", abrev, sep="")] = totales_alfa_propx
+  resultados[paste("bienNash_",   abrev, sep="")] = totales_bienestar_nash
+  resultados[paste("leximin_",    abrev, sep="")] = totales_leximin
+  resultados[paste("iters_",      abrev, sep="")] = totales_iters
+
+  list(
+    resultados         = resultados,
+    victorias_alfa_ef  = victorias_alfa_ef,
+    victorias_leximin  = victorias_leximin,
+    archivo_resultados = archivo_resultados,
+    archivo_instancias = archivo_instancias
+  )
+}
+
+# LoteInicio, LoteFin, CantidadDeInstanciasPorCotizacion, Lambda, Agentes y Tareas
+# significan exactamente lo mismo que en simulacionTareas, y las instancias se generan
+# con las mismas semillas: llamando a las dos funciones con los mismos parametros los
+# archivos de instancias salen identicos y los resultados se comparan fila por fila.
+#
+# No hay CantidadDeSegundosPorAlgoritmo porque el exhaustivo es deterministico: recorre
+# todos los repartos una vez y no tiene presupuesto de reloj que gastar.
+#
+# Por cada instancia se guardan tres bloques de las 6 alfas:
+#   _Exh_Lex  : las alfas del reparto leximin-optimo
+#   _Exh_Nash : las alfas del reparto de maximo bienestar Nash
+#   _Exh_Opt  : la "verdad verdadera", el mejor valor alcanzable de cada alfa por
+#               separado (puede venir de 6 repartos distintos)
+simulacionTareasExhaustivo = function(LoteInicio, LoteFin,
+                                      CantidadDeInstanciasPorCotizacion,
+                                      Lambda, Agentes, Tareas){
+
+  n_agentes = Agentes
+  n_tareas  = Tareas
+
+  familias = c("alfa_ef", "alfa_ef1", "alfa_efx", "alfa_prop", "alfa_prop1", "alfa_propx")
+  campeones = c("Exh_Lex", "Exh_Nash", "Exh_Opt")
+
+  num_lotes = LoteFin - LoteInicio + 1
+  num_filas = num_lotes * CantidadDeInstanciasPorCotizacion
+
+  # Una matriz por familia de alfa, con una columna por campeon.
+  totales = setNames(
+    lapply(familias, function(f) matrix(nrow=num_filas, ncol=3, dimnames=list(NULL, campeones))),
+    familias)
+  lote_col = vector(, length=num_filas)
+  caso_col = vector(, length=num_filas)
+
+  # --- Archivos de salida ---
+  sufijo = paste("_", n_tareas, "_tareas_", n_agentes, "_agen_",
+                 "nrep1i_", LoteInicio, "_nrep1f_", LoteFin,
+                 "_ninst_", CantidadDeInstanciasPorCotizacion,
+                 "_lambda_", Lambda, ".txt", sep="")
+  archivo_resultados = paste("reparto_TAREAS_EXH", sufijo, sep="")
+  archivo_instancias = paste("instancia_TAREAS_EXH", sufijo, sep="")
+
+  columnas  = c("rep", "caso",
+                unlist(lapply(familias, function(f) paste(f, "_", campeones, sep=""))))
+  columnas2 = c("rep", "caso", rep(1:n_tareas, n_agentes))
+  write.table(t(columnas),  file = archivo_resultados, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+  write.table(t(columnas2), file = archivo_instancias, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+  # --- Simulación ---
+  # Mismo c calibrado, mismas semillas y mismo orden que simulacionTareas: es lo que
+  # hace que los dos archivos de instancias sean identicos.
+  caso_c = which(valores_c$agentes == n_agentes & valores_c$tareas == n_tareas)
+  if(length(caso_c) == 0){
+    stop(sprintf("valores_c no tiene un c para %d agentes y %d tareas", n_agentes, n_tareas))
+  }
+  valor_c = valores_c$c[caso_c]
+  alfaVec = rep(valor_c, n_tareas)
+
+  instancias = vector("list", num_filas)
+  fila = 0
+  for(i in LoteInicio:LoteFin){
+    set.seed(500+i)
+    X1 = rdirichlet(1, alfaVec)   # cotización del lote
+
+    for(j in 1:CantidadDeInstanciasPorCotizacion){
+      set.seed(1000+CantidadDeInstanciasPorCotizacion*i+j)
+      fila = fila + 1
+      lote_col[fila] = i
+      caso_col[fila] = j
+      instancias[[fila]] = t(rdirichlet(n_agentes, Lambda*(as.vector(X1))))   # instancia
+    }
+  }
+
+  # A diferencia de simulacionTareas acá no hace falta pasar el RNG a "L'Ecuyer-CMRG":
+  # el exhaustivo no consume aleatoriedad, así que los workers dan lo mismo que el serial.
+  n_workers = max(1L, detectCores() - 1L)
+  chunks = split(seq_len(num_filas), ceiling(seq_len(num_filas)/n_workers))
+
+  for(chunk in chunks){
+    res_chunk = mclapply(instancias[chunk], repartoExhaustivoTareas, mc.cores = n_workers)
+
+    # mclapply no aborta: deja un try-error (o NULL) en la posición que falló.
+    if(any(!vapply(res_chunk, is.list, logical(1)))){
+      stop("falló un worker de mclapply; ver el mensaje de error de arriba")
+    }
+
+    for(k in seq_along(chunk)){
+      fila         = chunk[k]
+      exh          = res_chunk[[k]]
+      valoraciones = instancias[[fila]]
+      i            = lote_col[fila]
+      j            = caso_col[fila]
+
+      metricas_lex  = envidia2_tareas(valoraciones, exh$reparto_min_leximin)
+      metricas_nash = envidia2_tareas(valoraciones, exh$reparto_max_nash)
+
+      for(f in familias){
+        totales[[f]][fila, "Exh_Lex"]  = metricas_lex[[f]]
+        totales[[f]][fila, "Exh_Nash"] = metricas_nash[[f]]
+        totales[[f]][fila, "Exh_Opt"]  = exh[[paste(f, "_min", sep="")]]
+      }
+
+      # --- Escritura en archivo ---
+      guardo      = c(i, j, unlist(lapply(familias, function(f) totales[[f]][fila, ])))
+      guardo_inst = c(i, j, as.vector(valoraciones))
+
+      write.table(t(guardo),      file = archivo_resultados, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+      write.table(t(guardo_inst), file = archivo_instancias, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+
+      cat(sprintf("%d_agentes_%d_tareas_lambda_%s_lote_%d_caso_%d (%d/%d) — %d repartos\n",
+                  n_agentes, n_tareas, format(Lambda), i, j, fila, num_filas, exh$formas))
+      for(f in familias){
+        cat(sprintf("\t%-11s lex: %.4f | nash: %.4f | opt: %.4f\n",
+                    f, totales[[f]][fila, "Exh_Lex"], totales[[f]][fila, "Exh_Nash"],
+                    totales[[f]][fila, "Exh_Opt"]))
+      }
+    }
+  }
+
+  cat("\n===== Promedios =====\n")
+  for(f in familias){
+    cat(sprintf("%-11s lex: %.4f | nash: %.4f | opt: %.4f\n",
+                f, mean(totales[[f]][, "Exh_Lex"]), mean(totales[[f]][, "Exh_Nash"]),
+                mean(totales[[f]][, "Exh_Opt"])))
+  }
+
+  cat(sprintf("\nResultados: %s\nInstancias: %s\n", archivo_resultados, archivo_instancias))
+
+  resultados = data.frame(rep = lote_col, caso = caso_col)
+  for(f in familias){
+    resultados[paste(f, "_", campeones, sep="")] = totales[[f]]
+  }
+
+  list(
+    resultados         = resultados,
     archivo_resultados = archivo_resultados,
     archivo_instancias = archivo_instancias
   )
