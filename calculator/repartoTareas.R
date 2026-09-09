@@ -8,6 +8,7 @@ library("plotly")
 library("gridExtra")
 library("partitions")
 library("combinat")
+library("parallel")
 
 entregaBien=function(reparto_orig,benef_recibe,benef_entrega,bien_entrega){
   if(!(bien_entrega %in% reparto_orig[[benef_entrega]])){stop("no puede entregar ese bien ese beneficiario")}
@@ -177,14 +178,28 @@ envidia2_tareas = function(valoraciones, reparto) {
   alfa_prop1 = max(alfa_prop1_vec)
   alfa_propx = max(alfa_propx_vec)
 
+  bienestar_nash = productoria(1-diag(S))$producto
+
   list(
     alfa_ef    = alfa_ef,
     alfa_ef1   = alfa_ef1,
     alfa_efx   = alfa_efx,
     alfa_prop  = alfa_prop,
     alfa_prop1 = alfa_prop1,
-    alfa_propx = alfa_propx
+    alfa_propx = alfa_propx,
+    bienestar_nash = bienestar_nash
   )
+}
+
+productoria = function(vector){
+  prod=prodSinCero=1
+  for(i in 1:length(vector)){
+    prod=prod*vector[i]
+    if(vector[i]!=0){
+      prodSinCero=prodSinCero*vector[i]
+    }
+  }
+  list(producto=prod,productoSinCeros=prodSinCero)
 }
 
 ##########
@@ -412,6 +427,17 @@ paso1AgoritmoTareas=function(reparto_orig,matriz_valoracion){   #le intentamos q
   return(list(reparto_nuevo=reparto_orig,cambio=cambio))
 }
   
+
+# RepartoTareas:
+#
+# Primer paso: reparto al azar las tareas entre los agentes.
+# Se le intenta dar al que menos siente que labura una tarea.
+# Se busca en orden entre las tareas que no le tocaron empezando por aquella que a él le cuesta muy poco en relación al que
+# le tocó en el reparto original y así siguiendo con el resto de las tareas.
+# Si en alguno de esos intentos se logra mejorar el leximin entonces se hace la entrega de la tarea y cambia el reparto original
+# y se vuelve a empezar.
+# Si no se le logra dar al que menos sentía que labura a se intenta con el segundo, y así siguiendo. Si no se le logra dar tarea a ninguno mejorando el leximin se termina.
+# Habría que programar un análogo donde no se mira lo del leximin sino el coeficiente de envyratio. Eso no lo hice.
 
   
 repartoTareas=function(n_trab,matriz_valoracion){
@@ -848,6 +874,37 @@ chauTareasFeas2BestAlfaEf = function(valoraciones){
   list(reparto=reparto, matriz_costo_final=matriz_costo_final)
 }
 
+# Fijado en n_tareas y la cantidad de agentes, busco el c 
+# tal que esp_maximos(c,n_tareas)=1/n_agentes.
+# Con esta función deberíamos poder encontrar un 'c' que nos haga
+# encontrar cotizaciones con dirichlet lo suficientemente complejas.
+# Esta función se debería correr una sola vez para encontrar esos 'c'
+# para cada tupla de cantAgentes, cantTareas
+esp_maximos=function(c,n_tareas){
+  maximos=vector(,length=1000)
+    for(i in 1:1000){
+    alfa=rep(c,n_tareas)
+    maximos[i]=max(rdirichlet(1,alfa))  
+  }
+  mean(maximos)
+}
+
+# Tabla de los 'c' que cumplen esp_maximos(c,tareas)=1/agentes, para cada tupla
+# (agentes, tareas) que usamos en las simulaciones. Calculada una sola vez con
+# buscar_c() en localrun.R; es una estimación Monte Carlo, con error ~0.001.
+valores_c = data.frame(
+  agentes = c(  2,   2,   2,   2,   3,   3,   3,   3,   4,   4,   4,   4,
+                2,   2,   2,   2,   3,   3,   3,   3,   4,   4,   4,   4),
+  tareas  = c(  6,   9,  12,  15,   6,   7,   8,   9,   5,   6,   7,   8,
+               20,  25,  30,  35,  15,  20,  25,  30,  10,  15,  20,  25),
+  c       = c(0.519798, 0.277929, 0.189463, 0.144331,   # 2 agentes, exhaustivos
+              2.047168, 1.404768, 1.055133, 0.848103,   # 3 agentes, exhaustivos
+              23.142463, 7.591093, 4.093397, 2.705078,  # 4 agentes, exhaustivos
+              0.103716, 0.079383, 0.065265, 0.054984,   # 2 agentes, no exhaustivos
+              0.380984, 0.259959, 0.198221, 0.159328,   # 3 agentes, no exhaustivos
+              1.584675, 0.744774, 0.482087, 0.356434)   # 4 agentes, no exhaustivos
+)
+
 comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000, segundos=3){
   nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
               "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
@@ -1016,5 +1073,378 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000, s
     totales_alfa_ef   = totales_alfa_ef,
     victorias_leximin = victorias_leximin,
     totales_leximin   = totales_leximin
+  )
+}
+
+# Parametros para simulación:
+# LoteInicio: en las funciones de Agustin este seria nRep1i. marca el inicio del lote que vamos a ejecutar
+# LoteFin: en las funciones de Agustin este seria nRep1f. marca el fin del lote que vamos a ejecutar
+# CantidadDeInstanciasPorCotizacion: cuando formemos una cotizacion para un lote, vamos a crear esta cantidad de instancias que vamos a usar para correr todos los algoritmos
+# CantidadDeSegundosPorAlgoritmo: vamos a ejecutar cada algoritmo aleatorio esta cierta cantidad de segundos con la misma instancia y nos quedamos con el mejor leximin/alfaEF, etc.
+# Lambda: lambda a aplicar en la función dirichlet para formar las instancias a partir de la cotizacion. Por ej: 10, 100 o 1000
+# Agentes: cantidad de agentes de la simulación. Por ej: 3
+# Tareas: cantidad de tareas de la simulación. Por ej: 15
+#
+# Los tres últimos parámetros son escalares a propósito: una función de orden
+# superior es la que va a permutar sobre lambdas y tuplas (agentes, tareas).
+#
+# Ejemplo de corridas:
+# lambdas (10, 100, 1000)
+#
+# PRUEBA 1:
+# El exhaustivo Agustin lo corrio para
+# 2 agentes 6, 9, 12, 15 tareas
+# 3 agentes 6, 7, 8, 9 tareas
+# 4 agentes 5, 6, 7, 8 tareas
+# Correr los no exhaustivos con este mismo universo de tarea/agentes y contrastar con el exhaustivo
+#
+#
+# PRUEBA 2:
+# no exhaustivos:
+# 2 agentes 20, 25, 30, 35 tareas
+# 3 agentes 15, 20, 25, 30 tareas
+# 4 agentes 10, 15, 20, 25 tareas
+#
+# Sobre las semillas: set.seed fija las *instancias*, no los resultados. Los
+# algoritmos son todos aleatorios y consumen del mismo stream del RNG después
+# del set.seed, y como el presupuesto es por tiempo la cantidad de iteraciones
+# cambia según la máquina y su carga. O sea: el archivo de instancias es
+# reproducible, el de resultados no.
+#
+# Duración aproximada de una corrida:
+#   (LoteFin - LoteInicio + 1) * CantidadDeInstanciasPorCotizacion * 8 * CantidadDeSegundosPorAlgoritmo
+# segundos. Los 8 algoritmos son aleatorios, así que todos consumen el
+# presupuesto completo. Por ej: 50 lotes * 5 instancias * 8 * 3s ~ 100 minutos.
+#
+# Dudas:
+# ✅ En las corridas que me mencionó Agustín, el corre el exhaustivo con un set de agentes/tareas y el no exhaustivo con otro set distinto
+# Como es que comparamos después? -> Respuesta: se corren con el mismo universo tanto el exhaustivo como el no exhaustivo
+#
+# ✅ Tengo dudas todavía de como generé la tabla de C's
+#
+# En las simulaciones de Agustín se evaluan muchos parametros. Yo tengo solo alfaEF y Leximin (que son los que me traje a mi función de simulación)
+# Voy a necesitar una mano con adaptar los otros criterios de evaluación para tareas. (Verdad verdadera, Nash, Leximin)
+# ✅ Respondido: tengo que adaptar. Ver abajo.
+#
+# Pasos a seguir:
+# Tenemos que para cada reparto analizar los 6 atributos en los no exhaustivos
+# AlfaEF
+# AlfaEFX
+# AlfaEF1
+# AlfaPROP
+# AlfaPROP1
+# AlfaPROPX
+# Leximin
+# BienestarNash
+# MasTrabaja (El análogo a menosLleva de bienes)
+# DesutilidadSocial (suma de las desutilidades del reparto. Ver 'socials' en reparto sinExh)
+# 
+# Y para el exhaustivo sería
+# Todo lo de arriba
+# + mejor Lexi
+simulacionTareas = function(LoteInicio, LoteFin,
+                            CantidadDeInstanciasPorCotizacion,
+                            CantidadDeSegundosPorAlgoritmo,
+                            Lambda, Agentes, Tareas){
+
+  n_agentes = Agentes
+  n_tareas  = Tareas
+
+  nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
+              "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
+              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf")
+  abrev   = c("chau", "mio", "chau2", "tt", "tt_rnd", "tt_rnd_lec", "chau2_rnd", "chau2_alfaef")
+
+
+  num_lotes = LoteFin - LoteInicio + 1
+  num_filas = num_lotes * CantidadDeInstanciasPorCotizacion
+
+  victorias_alfa_ef         = setNames(integer(8), nombres)
+  victorias_leximin         = setNames(integer(8), nombres)
+  totales_alfa_ef           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_ef1          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_efx          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_prop         = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_prop1        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_alfa_propx        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_leximin           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_bienestar_nash    = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  totales_iters      = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  lote_col          = vector(, length=num_filas)
+  caso_col          = vector(, length=num_filas)
+
+  reparto_inicial = function(valoraciones){
+    reparto = vector(mode="list", length=dim(valoraciones)[2])
+    reparto[[1]] = 1:dim(valoraciones)[1]
+    reparto
+  }
+
+  # Corremos el algoritmo recibido por una cantidad de segundos
+  # y nos quedamos con el reparto con el mejor Leximin.
+  mejores_n_segundos = function(algoritmo, valoraciones, segundos){
+    reparto_elegido_alfa    = reparto_inicial(valoraciones)
+    reparto_elegido_leximin = reparto_inicial(valoraciones)
+    iteraciones             = 0
+
+    tiempo_inicio = Sys.time()
+    while(as.numeric(difftime(Sys.time(), tiempo_inicio, units = "secs")) < segundos){
+      iteraciones  = iteraciones + 1
+      reparto_aux  = algoritmo(valoraciones)
+
+      if(iteraciones == 1 ||
+         comparacion_leximin_pp_tareas(reparto_elegido_leximin, reparto_aux$reparto, valoraciones) == 2){
+        reparto_elegido_leximin = reparto_aux$reparto
+      }
+    }
+
+    # La carga la sacamos del reparto ganador en vez de arrastrarla por el loop:
+    # así no dependemos de que cada wrapper setee carga_total.
+    carga_leximin = max(diag(valoracionReparto(reparto_elegido_leximin, valoraciones)))
+    envidia_func = envidia2_tareas(valoraciones, reparto_elegido_leximin)
+
+    list(
+      alfa_ef       = envidia_func$alfa_ef,
+      alfa_ef1      = envidia_func$alfa_ef1,
+      alfa_efx      = envidia_func$alfa_efx,
+      alfa_prop     = envidia_func$alfa_prop,
+      alfa_prop1    = envidia_func$alfa_prop1,
+      alfa_propx    = envidia_func$alfa_propx,
+      bienestar_nash = envidia_func$bienestar_nash,
+      carga_leximin = carga_leximin,
+      iteraciones   = iteraciones
+    )
+  }
+
+  wrapper_0 = function(valoraciones){
+    res = chau_tareas_feas(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_1 = function(valoraciones){
+    res = repartoTareas(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_2 = function(valoraciones){
+    res = chauTareasFeas2(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_3 = function(valoraciones){
+    res = repartoTareasTopTrading(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_4 = function(valoraciones){
+    res = repartoTareasTopTradingRandom(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_5 = function(valoraciones){
+    res = repartoTareasTopTradingRandomLastEnvyCycle(n_agentes, valoraciones)
+    res$reparto = res$Art
+    res$carga_total = max(res$llevan)
+    res
+  }
+  wrapper_6 = function(valoraciones){
+    res = chauTareasFeas2Random(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+  wrapper_7 = function(valoraciones){
+    res = chauTareasFeas2BestAlfaEf(valoraciones)
+    res$reparto = res$reparto
+    res$carga_total = max(diag(res$matriz_costo_final))
+    res
+  }
+
+  wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3, wrapper_4, wrapper_5, wrapper_6, wrapper_7)
+
+  # Corre los 8 algoritmos sobre una misma instancia. Es la unidad de trabajo que
+  # le mandamos a cada worker: los 8 quedan seriales dentro del mismo proceso.
+  correr_instancia = function(valoraciones){
+    lapply(wrappers, function(w) mejores_n_segundos(w, valoraciones, CantidadDeSegundosPorAlgoritmo))
+  }
+
+  # --- Archivos de salida ---
+  sufijo = paste("_", n_tareas, "_tareas_", n_agentes, "_agen_",
+                 "nrep1i_", LoteInicio, "_nrep1f_", LoteFin,
+                 "_ninst_", CantidadDeInstanciasPorCotizacion,
+                 "_lambda_", Lambda, ".txt", sep="")
+  archivo_resultados = paste("reparto_TAREAS", sufijo, sep="")
+  archivo_instancias = paste("instancia_TAREAS", sufijo, sep="")
+
+  columnas  = c("rep", "caso",
+                paste("alfa_ef_",    abrev, sep=""),
+                paste("alfa_ef1_",   abrev, sep=""),
+                paste("alfa_efx_",   abrev, sep=""),
+                paste("alfa_prop_",  abrev, sep=""),
+                paste("alfa_prop1_", abrev, sep=""),
+                paste("alfa_propx_", abrev, sep=""),
+                paste("bienNash_",   abrev, sep=""),
+                paste("leximin_",    abrev, sep=""),
+                paste("iters_",      abrev, sep=""))
+  columnas2 = c("rep", "caso", rep(1:n_tareas, n_agentes))
+  write.table(t(columnas),  file = archivo_resultados, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+  write.table(t(columnas2), file = archivo_instancias, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+  # --- Simulación ---
+  # El alfa de la Dirichlet que genera la cotización no es 1: usamos el c
+  # calibrado para esta tupla (agentes, tareas) de la tabla valores_c.
+  caso_c = which(valores_c$agentes == n_agentes & valores_c$tareas == n_tareas)
+  if(length(caso_c) == 0){
+    stop(sprintf("valores_c no tiene un c para %d agentes y %d tareas", n_agentes, n_tareas))
+  }
+  valor_c = valores_c$c[caso_c]
+  alfaVec = rep(valor_c, n_tareas)
+
+  # Cada fila (lote, caso) es independiente, así que las repartimos entre workers.
+  # El paralelismo va a nivel de fila y no de los 8 algoritmos a propósito: como el
+  # presupuesto de cada algoritmo es de reloj, correr los 8 en procesos distintos los
+  # deja a merced de en qué núcleo los ponga el sistema (los de eficiencia son
+  # bastante más lentos), y eso sesgaría justo la comparación que queremos medir.
+  # Con una fila por worker los 8 comparten proceso y núcleo: si a una fila le toca un
+  # núcleo lento, itera menos en los 8 por igual y la comparación interna no cambia.
+  n_workers = max(1L, detectCores() - 1L)
+
+  # Generamos todas las instancias acá, en el mismo orden y con las mismas semillas
+  # de siempre: así el archivo de instancias no depende del paralelismo.
+  instancias = vector("list", num_filas)
+  fila = 0
+  for(i in LoteInicio:LoteFin){
+    set.seed(500+i)
+    X1 = rdirichlet(1, alfaVec)   # cotización del lote
+
+    for(j in 1:CantidadDeInstanciasPorCotizacion){
+      set.seed(1000+CantidadDeInstanciasPorCotizacion*i+j)
+      fila = fila + 1
+      lote_col[fila] = i
+      caso_col[fila] = j
+      instancias[[fila]] = t(rdirichlet(n_agentes, Lambda*(as.vector(X1))))   # instancia
+    }
+  }
+
+  # De acá en adelante el RNG lo consumen los algoritmos, que corren dentro de los
+  # workers. Un fork le copia al hijo el .Random.seed del padre, así que sin esto los
+  # workers sortearían todos lo mismo; L'Ecuyer-CMRG le da a cada uno un stream
+  # disjunto. Va después de generar las instancias, y se restaura al salir, porque
+  # set.seed produce números distintos según el RNGkind activo.
+  rng_previo = RNGkind()
+  RNGkind("L'Ecuyer-CMRG")
+  on.exit(RNGkind(rng_previo[1], rng_previo[2], rng_previo[3]), add = TRUE)
+
+  # Vamos por chunks de n_workers filas, en vez de mandar todo junto, para no perder
+  # la escritura incremental a archivo ni el progreso por pantalla.
+  chunks = split(seq_len(num_filas), ceiling(seq_len(num_filas)/n_workers))
+
+  for(chunk in chunks){
+    # cada worker corre los 8 algoritmos de una fila la mayor cantidad de veces
+    # que pueda en N segundos
+    res_chunk = mclapply(instancias[chunk], correr_instancia, mc.cores = n_workers)
+
+    # mclapply no aborta: deja un try-error (o NULL) en la posición que falló.
+    if(any(!vapply(res_chunk, is.list, logical(1)))){
+      stop("falló un worker de mclapply; ver el mensaje de error de arriba")
+    }
+
+    for(k in seq_along(chunk)){
+      fila         = chunk[k]
+      res_fila     = res_chunk[[k]]
+      valoraciones = instancias[[fila]]
+      i            = lote_col[fila]
+      j            = caso_col[fila]
+
+      for(a in 1:8){
+        res = res_fila[[a]]
+
+        totales_alfa_ef[fila, a]    = res$alfa_ef
+        totales_alfa_ef1[fila, a]   = res$alfa_ef1
+        totales_alfa_efx[fila, a]   = res$alfa_efx
+        totales_alfa_prop[fila, a]  = res$alfa_prop
+        totales_alfa_prop1[fila, a] = res$alfa_prop1
+        totales_alfa_propx[fila, a] = res$alfa_propx
+        totales_bienestar_nash[fila, a]    = res$bienestar_nash
+        totales_leximin[fila, a]    = res$carga_leximin
+        totales_iters[fila, a]      = res$iteraciones
+      }
+
+      ganador_alfa_ef = which(totales_alfa_ef[fila, ] == min(totales_alfa_ef[fila, ]))
+      victorias_alfa_ef[ganador_alfa_ef] = victorias_alfa_ef[ganador_alfa_ef] + 1
+
+      ganador_leximin = which(totales_leximin[fila, ] == min(totales_leximin[fila, ]))
+      victorias_leximin[ganador_leximin] = victorias_leximin[ganador_leximin] + 1
+
+      # --- Escritura en archivo ---
+      guardo      = c(i, j,
+                      totales_alfa_ef[fila, ], totales_alfa_ef1[fila, ], totales_alfa_efx[fila, ],
+                      totales_alfa_prop[fila, ], totales_alfa_prop1[fila, ], totales_alfa_propx[fila, ],
+                      totales_bienestar_nash[fila, ], totales_leximin[fila, ], totales_iters[fila, ])
+      guardo_inst = c(i, j, as.vector(valoraciones))
+
+      write.table(t(guardo),      file = archivo_resultados, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+      write.table(t(guardo_inst), file = archivo_instancias, sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+
+      cat(sprintf("%d_agentes_%d_tareas_lambda_%s_lote_%d_caso_%d (%d/%d)\n",
+                  n_agentes, n_tareas, format(Lambda), i, j, fila, num_filas))
+      cat(sprintf("\talfa_ef: %s — ganador: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_ef[fila, ]), collapse=" | "),
+                  paste(nombres[ganador_alfa_ef], collapse=", ")))
+      cat(sprintf("\talfa_ef1: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_ef1[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_efx: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_efx[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_prop: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_prop[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_prop1: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_prop1[fila, ]), collapse=" | ")))
+      cat(sprintf("\talfa_propx: %s\n",
+                  paste(sprintf("%.4f", totales_alfa_propx[fila, ]), collapse=" | ")))
+      cat(sprintf("\tbienNash: %s\n",
+                  paste(sprintf("%.4f", totales_bienestar_nash[fila, ]), collapse=" | ")))
+      cat(sprintf("\tleximin: %s — ganador: %s\n",
+                  paste(sprintf("%.4f", totales_leximin[fila, ]), collapse=" | "),
+                  paste(nombres[ganador_leximin], collapse=", ")))
+    }
+  }
+
+  cat("\n===== Results (alfa_ef) =====\n")
+  for(a in 1:8){
+    cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg alfa_ef: %.4f\n",
+                nombres[a], victorias_alfa_ef[a], num_filas,
+                100*victorias_alfa_ef[a]/num_filas, mean(totales_alfa_ef[,a])))
+  }
+
+  cat("\n===== Results (leximin) =====\n")
+  for(a in 1:8){
+    cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg carga leximin: %.4f\n",
+                nombres[a], victorias_leximin[a], num_filas,
+                100*victorias_leximin[a]/num_filas, mean(totales_leximin[,a])))
+  }
+
+  cat(sprintf("\nResultados: %s\nInstancias: %s\n", archivo_resultados, archivo_instancias))
+
+  resultados = data.frame(rep = lote_col, caso = caso_col)
+  resultados[paste("alfa_ef_",    abrev, sep="")] = totales_alfa_ef
+  resultados[paste("alfa_ef1_",   abrev, sep="")] = totales_alfa_ef1
+  resultados[paste("alfa_efx_",   abrev, sep="")] = totales_alfa_efx
+  resultados[paste("alfa_prop_",  abrev, sep="")] = totales_alfa_prop
+  resultados[paste("alfa_prop1_", abrev, sep="")] = totales_alfa_prop1
+  resultados[paste("alfa_propx_", abrev, sep="")] = totales_alfa_propx
+  resultados[paste("bienNash_",   abrev, sep="")] = totales_bienestar_nash
+  resultados[paste("leximin_",    abrev, sep="")] = totales_leximin
+  resultados[paste("iters_",      abrev, sep="")] = totales_iters
+
+  list(
+    resultados         = resultados,
+    victorias_alfa_ef  = victorias_alfa_ef,
+    victorias_leximin  = victorias_leximin,
+    archivo_resultados = archivo_resultados,
+    archivo_instancias = archivo_instancias
   )
 }
