@@ -414,6 +414,7 @@ repartoExhaustivoTareas = function(valoraciones){
 
   reparto_min_leximin = reparto_max_nash = NULL
   nash_max = -Inf
+  cantidad_reciben_max=0
 
   # Las 6 alfas en el mismo orden en que las reporta la simulacion.
   alfas_nombres = c("alfa_ef", "alfa_ef1", "alfa_efx", "alfa_prop", "alfa_prop1", "alfa_propx")
@@ -466,10 +467,22 @@ repartoExhaustivoTareas = function(valoraciones){
           reparto_min_leximin = repartido
         }
 
-        # Campeon Nash: producto de (1 - carga propia), mas alto es mejor.
-        if(metricas$bienestar_nash > nash_max){
-          nash_max = metricas$bienestar_nash
-          reparto_max_nash = repartido
+        # Campeon Nash: me quedo con el Nash que reparta mejor
+        # a lo largo de los agentes. producto de (1 - carga propia), mas alto es mejor.
+        cantidad_reciben_aux=sum(!sapply(repartido, is.null))
+        if(cantidad_reciben_aux>=cantidad_reciben_max){
+          if(cantidad_reciben_aux>cantidad_reciben_max){
+            cantidad_reciben_max=cantidad_reciben_aux
+            reparto_max_nash=repartido
+            nash_max=metricas$bienestar_nash
+          }else{
+            if (cantidad_reciben_aux==cantidad_reciben_max) {
+              if(metricas$bienestar_nash>nash_max){
+                reparto_max_nash=repartido
+                nash_max=metricas$bienestar_nash
+              }
+            }
+          }
         }
       }
     }
@@ -585,7 +598,59 @@ paso1AgoritmoTareas=function(reparto_orig,matriz_valoracion){   #le intentamos q
   }
   return(list(reparto_nuevo=reparto_orig,cambio=cambio))
 }
-  
+
+
+
+# la funcion aparece_pri tiene entradas:
+# "valores" conjunto de valores que están dentro de un vector
+# "vector" el vector que contiene a los valores
+# y la salida es
+# "valor_pri" el valor de los "valores" que aparece primero en el vector.
+aparece_pri = function(valores,vector){
+  for(v in vector){
+    for(val in valores){
+      if(val==v){return(val)}
+    }
+  }
+}
+
+greedy_tareas=function(valoraciones,orden_desempate){
+  nAgentes=dim(valoraciones)[2]
+  nObjetos=dim(valoraciones)[1]
+  props=proporciones(valoraciones)
+  reciben=vector(mode="list",length=nAgentes)
+  ponderan=rep(0,length=nAgentes) #vector de lo que cada agente pondera su lote
+  restantes=1:nObjetos
+  for(i in 1:nObjetos){
+    ponderan_min=which(ponderan==min(ponderan))
+    agente_seleccionado = aparece_pri(ponderan_min,orden_desempate)
+    tarea_elegida=restantes[which(props[restantes,agente_seleccionado]==min(props[restantes,agente_seleccionado]))[1]]
+    reciben[[agente_seleccionado]]=c(reciben[[agente_seleccionado]],tarea_elegida)
+    ponderan[agente_seleccionado]=ponderan[agente_seleccionado]+props[tarea_elegida,agente_seleccionado]
+    restantes=setdiff(restantes,tarea_elegida)
+  }
+  return(list(reciben=reciben,ponderan=ponderan))
+}
+
+greedy_tareas_maximiza_leximin=function(valoraciones){
+  n_agentes = dim(valoraciones)[2]
+  n_tareas = dim(valoraciones)[1]
+  ordenes_posibles=perms(n_agentes)
+  cant_ordenes=dim(ordenes_posibles)[2]
+  M=proporciones(valoraciones)
+  reparto1=vector(mode="list",length=n_agentes)
+  reparto1[[1]]=1:n_tareas
+  for(i in 1:cant_ordenes){
+    orden=ordenes_posibles[,i]
+    reparto_aux=greedy_tareas(valoraciones,orden)$reciben
+    if(comparacion_leximin_pp_tareas(reparto1,reparto_aux,valoraciones)==2){
+      reparto1=reparto_aux
+    }
+  }
+  reparto1  
+}
+
+
 
 # RepartoTareas:
 #
@@ -1179,6 +1244,27 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000, s
 
   wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3, wrapper_4, wrapper_5, wrapper_6, wrapper_7)
 
+  # Los deterministas devuelven la *lista* de repartos candidatos que generan, no un
+  # solo reparto: mejor_leximin_determinista se queda con el mejor de esos.
+  determinista_0 = function(valoraciones){
+    lapply(repartoTareasAllRoundRobins(valoraciones), function(res) res$Art)
+  }
+  determinista_1 = function(valoraciones){
+    # greedy_tareas_maximiza_leximin ya elige el mejor Leximin entre las n! ordenes
+    # de desempate, asi que aporta un unico candidato.
+    list(greedy_tareas_maximiza_leximin(valoraciones))
+  }
+
+  deterministicos = list(determinista_0, determinista_1)
+
+  correr_algoritmo = function(a, valoraciones){
+    if(a <= length(wrappers)){
+      mejores_n_segundos(wrappers[[a]], valoraciones, CantidadDeSegundosPorAlgoritmo)
+    }else{
+      mejor_leximin_determinista(deterministicos[[a - length(wrappers)]](valoraciones), valoraciones)
+    }
+  }
+
   for(t in 1:n_tests){
     cotizacion = rdirichlet(1, rep(1, n_tareas))
     valoraciones = t(rdirichlet(n_agentes, as.vector(cotizacion)*1000))
@@ -1272,8 +1358,9 @@ comparar_algoritmos = function(n_tests, n_tareas=12, n_agentes=3, n_iter=1000, s
 #
 # Duración aproximada de una corrida:
 #   (LoteFin - LoteInicio + 1) * CantidadDeInstanciasPorCotizacion * 8 * CantidadDeSegundosPorAlgoritmo
-# segundos. Los 8 algoritmos son aleatorios, así que todos consumen el
-# presupuesto completo. Por ej: 50 lotes * 5 instancias * 8 * 3s ~ 100 minutos.
+# segundos. Sigue siendo 8 y no 10: los primeros 8 algoritmos son aleatorios y consumen
+# el presupuesto completo, mientras que los dos deterministas corren una sola vez y no
+# suman tiempo apreciable. Por ej: 50 lotes * 5 instancias * 8 * 3s ~ 100 minutos.
 #
 # Dudas:
 # ✅ En las corridas que me mencionó Agustín, el corre el exhaustivo con un set de agentes/tareas y el no exhaustivo con otro set distinto
@@ -1309,26 +1396,31 @@ simulacionTareas = function(LoteInicio, LoteFin,
   n_agentes = Agentes
   n_tareas  = Tareas
 
+  # Los primeros 8 son aleatorios y corren contra el presupuesto de reloj; los dos
+  # últimos son deterministas y corren una sola vez.
   nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
               "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
-              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf")
-  abrev   = c("chau", "mio", "chau2", "tt", "tt_rnd", "tt_rnd_lec", "chau2_rnd", "chau2_alfaef")
+              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf",
+              "repartoTareasAllRoundRobins", "greedy_tareas_maximiza_leximin")
+  abrev   = c("chau", "mio", "chau2", "tt", "tt_rnd", "tt_rnd_lec", "chau2_rnd", "chau2_alfaef",
+              "round_robin", "greedy")
+  n_algoritmos = length(nombres)
 
 
   num_lotes = LoteFin - LoteInicio + 1
   num_filas = num_lotes * CantidadDeInstanciasPorCotizacion
 
-  victorias_alfa_ef         = setNames(integer(8), nombres)
-  victorias_leximin         = setNames(integer(8), nombres)
-  totales_alfa_ef           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_ef1          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_efx          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_prop         = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_prop1        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_propx        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_leximin           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_bienestar_nash    = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_iters      = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  victorias_alfa_ef         = setNames(integer(n_algoritmos), nombres)
+  victorias_leximin         = setNames(integer(n_algoritmos), nombres)
+  totales_alfa_ef           = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_ef1          = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_efx          = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_prop         = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_prop1        = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_propx        = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_leximin           = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_bienestar_nash    = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_iters      = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
   lote_col          = vector(, length=num_filas)
   caso_col          = vector(, length=num_filas)
 
@@ -1336,6 +1428,25 @@ simulacionTareas = function(LoteInicio, LoteFin,
     reparto = vector(mode="list", length=dim(valoraciones)[2])
     reparto[[1]] = 1:dim(valoraciones)[1]
     reparto
+  }
+
+  # Las metricas del reparto ganador, en el formato que consume el loop de volcado.
+  # La carga la sacamos del reparto ganador en vez de arrastrarla por el loop:
+  # así no dependemos de que cada wrapper setee carga_total.
+  metricas_reparto = function(reparto, valoraciones, iteraciones){
+    envidia_func = envidia2_tareas(valoraciones, reparto)
+
+    list(
+      alfa_ef       = envidia_func$alfa_ef,
+      alfa_ef1      = envidia_func$alfa_ef1,
+      alfa_efx      = envidia_func$alfa_efx,
+      alfa_prop     = envidia_func$alfa_prop,
+      alfa_prop1    = envidia_func$alfa_prop1,
+      alfa_propx    = envidia_func$alfa_propx,
+      bienestar_nash = envidia_func$bienestar_nash,
+      carga_leximin = max(diag(valoracionReparto(reparto, valoraciones))),
+      iteraciones   = iteraciones
+    )
   }
 
   # Corremos el algoritmo recibido por una cantidad de segundos
@@ -1356,22 +1467,21 @@ simulacionTareas = function(LoteInicio, LoteFin,
       }
     }
 
-    # La carga la sacamos del reparto ganador en vez de arrastrarla por el loop:
-    # así no dependemos de que cada wrapper setee carga_total.
-    carga_leximin = max(diag(valoracionReparto(reparto_elegido_leximin, valoraciones)))
-    envidia_func = envidia2_tareas(valoraciones, reparto_elegido_leximin)
+    metricas_reparto(reparto_elegido_leximin, valoraciones, iteraciones)
+  }
 
-    list(
-      alfa_ef       = envidia_func$alfa_ef,
-      alfa_ef1      = envidia_func$alfa_ef1,
-      alfa_efx      = envidia_func$alfa_efx,
-      alfa_prop     = envidia_func$alfa_prop,
-      alfa_prop1    = envidia_func$alfa_prop1,
-      alfa_propx    = envidia_func$alfa_propx,
-      bienestar_nash = envidia_func$bienestar_nash,
-      carga_leximin = carga_leximin,
-      iteraciones   = iteraciones
-    )
+  # Los deterministas no tienen presupuesto de reloj: agotan su espacio de busqueda en
+  # una sola pasada. Nos quedamos con el mejor Leximin entre sus candidatos, igual que
+  # arriba entre las iteraciones de los aleatorios.
+  mejor_leximin_determinista = function(repartos, valoraciones){
+    reparto_elegido_leximin = repartos[[1]]
+    for(reparto_aux in repartos[-1]){
+      if(comparacion_leximin_pp_tareas(reparto_elegido_leximin, reparto_aux, valoraciones) == 2){
+        reparto_elegido_leximin = reparto_aux
+      }
+    }
+
+    metricas_reparto(reparto_elegido_leximin, valoraciones, 1)
   }
 
   wrapper_0 = function(valoraciones){
@@ -1425,10 +1535,31 @@ simulacionTareas = function(LoteInicio, LoteFin,
 
   wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3, wrapper_4, wrapper_5, wrapper_6, wrapper_7)
 
-  # Corre los 8 algoritmos sobre una misma instancia. Es la unidad de trabajo que
-  # le mandamos a cada worker: los 8 quedan seriales dentro del mismo proceso.
+  # Los deterministas devuelven la *lista* de repartos candidatos que generan, no un
+  # solo reparto: mejor_leximin_determinista se queda con el mejor de esos.
+  determinista_0 = function(valoraciones){
+    lapply(repartoTareasAllRoundRobins(valoraciones), function(res) res$Art)
+  }
+  determinista_1 = function(valoraciones){
+    # greedy_tareas_maximiza_leximin ya elige el mejor Leximin entre las n! ordenes
+    # de desempate, asi que aporta un unico candidato.
+    list(greedy_tareas_maximiza_leximin(valoraciones))
+  }
+
+  deterministicos = list(determinista_0, determinista_1)
+
+  correr_algoritmo = function(a, valoraciones){
+    if(a <= length(wrappers)){
+      mejores_n_segundos(wrappers[[a]], valoraciones, CantidadDeSegundosPorAlgoritmo)
+    }else{
+      mejor_leximin_determinista(deterministicos[[a - length(wrappers)]](valoraciones), valoraciones)
+    }
+  }
+
+  # Corre todos los algoritmos sobre una misma instancia. Es la unidad de trabajo que
+  # le mandamos a cada worker: quedan todos seriales dentro del mismo proceso.
   correr_instancia = function(valoraciones){
-    lapply(wrappers, function(w) mejores_n_segundos(w, valoraciones, CantidadDeSegundosPorAlgoritmo))
+    lapply(seq_len(n_algoritmos), correr_algoritmo, valoraciones = valoraciones)
   }
 
   # --- Archivos de salida ---
@@ -1519,7 +1650,7 @@ simulacionTareas = function(LoteInicio, LoteFin,
       i            = lote_col[fila]
       j            = caso_col[fila]
 
-      for(a in 1:8){
+      for(a in 1:n_algoritmos){
         res = res_fila[[a]]
 
         totales_alfa_ef[fila, a]    = res$alfa_ef
@@ -1573,14 +1704,14 @@ simulacionTareas = function(LoteInicio, LoteFin,
   }
 
   cat("\n===== Results (alfa_ef) =====\n")
-  for(a in 1:8){
+  for(a in 1:n_algoritmos){
     cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg alfa_ef: %.4f\n",
                 nombres[a], victorias_alfa_ef[a], num_filas,
                 100*victorias_alfa_ef[a]/num_filas, mean(totales_alfa_ef[,a])))
   }
 
   cat("\n===== Results (leximin) =====\n")
-  for(a in 1:8){
+  for(a in 1:n_algoritmos){
     cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg carga leximin: %.4f\n",
                 nombres[a], victorias_leximin[a], num_filas,
                 100*victorias_leximin[a]/num_filas, mean(totales_leximin[,a])))
@@ -1619,26 +1750,31 @@ simulacionTareasSinParallel = function(LoteInicio, LoteFin,
   n_agentes = Agentes
   n_tareas  = Tareas
 
+  # Los primeros 8 son aleatorios y corren contra el presupuesto de reloj; los dos
+  # últimos son deterministas y corren una sola vez.
   nombres = c("chau_tareas_feas", "repartoTareas", "chauTareasFeas2", "repartoTareasTopTrading",
               "repartoTareasTopTradingRandom", "repartoTareasTopTradingRandomLastEnvyCycle",
-              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf")
-  abrev   = c("chau", "mio", "chau2", "tt", "tt_rnd", "tt_rnd_lec", "chau2_rnd", "chau2_alfaef")
+              "chauTareasFeas2Random", "chauTareasFeas2BestAlfaEf",
+              "repartoTareasAllRoundRobins", "greedy_tareas_maximiza_leximin")
+  abrev   = c("chau", "mio", "chau2", "tt", "tt_rnd", "tt_rnd_lec", "chau2_rnd", "chau2_alfaef",
+              "round_robin", "greedy")
+  n_algoritmos = length(nombres)
 
 
   num_lotes = LoteFin - LoteInicio + 1
   num_filas = num_lotes * CantidadDeInstanciasPorCotizacion
 
-  victorias_alfa_ef         = setNames(integer(8), nombres)
-  victorias_leximin         = setNames(integer(8), nombres)
-  totales_alfa_ef           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_ef1          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_efx          = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_prop         = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_prop1        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_alfa_propx        = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_leximin           = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_bienestar_nash    = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
-  totales_iters      = matrix(nrow=num_filas, ncol=8, dimnames=list(NULL, nombres))
+  victorias_alfa_ef         = setNames(integer(n_algoritmos), nombres)
+  victorias_leximin         = setNames(integer(n_algoritmos), nombres)
+  totales_alfa_ef           = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_ef1          = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_efx          = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_prop         = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_prop1        = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_alfa_propx        = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_leximin           = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_bienestar_nash    = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
+  totales_iters      = matrix(nrow=num_filas, ncol=n_algoritmos, dimnames=list(NULL, nombres))
   lote_col          = vector(, length=num_filas)
   caso_col          = vector(, length=num_filas)
 
@@ -1646,6 +1782,25 @@ simulacionTareasSinParallel = function(LoteInicio, LoteFin,
     reparto = vector(mode="list", length=dim(valoraciones)[2])
     reparto[[1]] = 1:dim(valoraciones)[1]
     reparto
+  }
+
+  # Las metricas del reparto ganador, en el formato que consume el loop de volcado.
+  # La carga la sacamos del reparto ganador en vez de arrastrarla por el loop:
+  # así no dependemos de que cada wrapper setee carga_total.
+  metricas_reparto = function(reparto, valoraciones, iteraciones){
+    envidia_func = envidia2_tareas(valoraciones, reparto)
+
+    list(
+      alfa_ef       = envidia_func$alfa_ef,
+      alfa_ef1      = envidia_func$alfa_ef1,
+      alfa_efx      = envidia_func$alfa_efx,
+      alfa_prop     = envidia_func$alfa_prop,
+      alfa_prop1    = envidia_func$alfa_prop1,
+      alfa_propx    = envidia_func$alfa_propx,
+      bienestar_nash = envidia_func$bienestar_nash,
+      carga_leximin = max(diag(valoracionReparto(reparto, valoraciones))),
+      iteraciones   = iteraciones
+    )
   }
 
   # Corremos el algoritmo recibido por una cantidad de segundos
@@ -1666,22 +1821,21 @@ simulacionTareasSinParallel = function(LoteInicio, LoteFin,
       }
     }
 
-    # La carga la sacamos del reparto ganador en vez de arrastrarla por el loop:
-    # así no dependemos de que cada wrapper setee carga_total.
-    carga_leximin = max(diag(valoracionReparto(reparto_elegido_leximin, valoraciones)))
-    envidia_func = envidia2_tareas(valoraciones, reparto_elegido_leximin)
+    metricas_reparto(reparto_elegido_leximin, valoraciones, iteraciones)
+  }
 
-    list(
-      alfa_ef       = envidia_func$alfa_ef,
-      alfa_ef1      = envidia_func$alfa_ef1,
-      alfa_efx      = envidia_func$alfa_efx,
-      alfa_prop     = envidia_func$alfa_prop,
-      alfa_prop1    = envidia_func$alfa_prop1,
-      alfa_propx    = envidia_func$alfa_propx,
-      bienestar_nash = envidia_func$bienestar_nash,
-      carga_leximin = carga_leximin,
-      iteraciones   = iteraciones
-    )
+  # Los deterministas no tienen presupuesto de reloj: agotan su espacio de busqueda en
+  # una sola pasada. Nos quedamos con el mejor Leximin entre sus candidatos, igual que
+  # arriba entre las iteraciones de los aleatorios.
+  mejor_leximin_determinista = function(repartos, valoraciones){
+    reparto_elegido_leximin = repartos[[1]]
+    for(reparto_aux in repartos[-1]){
+      if(comparacion_leximin_pp_tareas(reparto_elegido_leximin, reparto_aux, valoraciones) == 2){
+        reparto_elegido_leximin = reparto_aux
+      }
+    }
+
+    metricas_reparto(reparto_elegido_leximin, valoraciones, 1)
   }
 
   wrapper_0 = function(valoraciones){
@@ -1735,6 +1889,27 @@ simulacionTareasSinParallel = function(LoteInicio, LoteFin,
 
   wrappers = list(wrapper_0, wrapper_1, wrapper_2, wrapper_3, wrapper_4, wrapper_5, wrapper_6, wrapper_7)
 
+  # Los deterministas devuelven la *lista* de repartos candidatos que generan, no un
+  # solo reparto: mejor_leximin_determinista se queda con el mejor de esos.
+  determinista_0 = function(valoraciones){
+    lapply(repartoTareasAllRoundRobins(valoraciones), function(res) res$Art)
+  }
+  determinista_1 = function(valoraciones){
+    # greedy_tareas_maximiza_leximin ya elige el mejor Leximin entre las n! ordenes
+    # de desempate, asi que aporta un unico candidato.
+    list(greedy_tareas_maximiza_leximin(valoraciones))
+  }
+
+  deterministicos = list(determinista_0, determinista_1)
+
+  correr_algoritmo = function(a, valoraciones){
+    if(a <= length(wrappers)){
+      mejores_n_segundos(wrappers[[a]], valoraciones, CantidadDeSegundosPorAlgoritmo)
+    }else{
+      mejor_leximin_determinista(deterministicos[[a - length(wrappers)]](valoraciones), valoraciones)
+    }
+  }
+
   # --- Archivos de salida ---
   sufijo = paste("_", n_tareas, "_tareas_", n_agentes, "_agen_",
                  "nrep1i_", LoteInicio, "_nrep1f_", LoteFin,
@@ -1780,9 +1955,10 @@ simulacionTareasSinParallel = function(LoteInicio, LoteFin,
       lote_col[fila] = i
       caso_col[fila] = j
 
-      for(a in 1:8){
-        # ejecutamos cada algoritmo la mayor cantidad de veces que podamos en N segundos
-        res = mejores_n_segundos(wrappers[[a]], valoraciones, CantidadDeSegundosPorAlgoritmo)
+      for(a in 1:n_algoritmos){
+        # los aleatorios los ejecutamos la mayor cantidad de veces que podamos en N
+        # segundos; los deterministas, una sola vez
+        res = correr_algoritmo(a, valoraciones)
 
         totales_alfa_ef[fila, a]    = res$alfa_ef
         totales_alfa_ef1[fila, a]   = res$alfa_ef1
@@ -1835,14 +2011,14 @@ simulacionTareasSinParallel = function(LoteInicio, LoteFin,
   }
 
   cat("\n===== Results (alfa_ef) =====\n")
-  for(a in 1:8){
+  for(a in 1:n_algoritmos){
     cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg alfa_ef: %.4f\n",
                 nombres[a], victorias_alfa_ef[a], num_filas,
                 100*victorias_alfa_ef[a]/num_filas, mean(totales_alfa_ef[,a])))
   }
 
   cat("\n===== Results (leximin) =====\n")
-  for(a in 1:8){
+  for(a in 1:n_algoritmos){
     cat(sprintf("%-50s  wins: %d/%d (%.1f%%)\tavg carga leximin: %.4f\n",
                 nombres[a], victorias_leximin[a], num_filas,
                 100*victorias_leximin[a]/num_filas, mean(totales_leximin[,a])))
