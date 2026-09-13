@@ -65,4 +65,73 @@ source("repartoTareas.R")
 # cat("chau_tareas_feas2: ", round(max(diag(valoracion_obtenida_2)), 4), "\n")
 
 
-comparar_algoritmos(10)
+# comparar_algoritmos(10)
+# Uso único: encontrar el 'c' tal que esp_maximos(c, n_tareas) = 1/n_agentes.
+# esp_maximos es decreciente en c (con c chico el máximo tiende a 1, con c grande
+# tiende a 1/n_tareas), así que alcanza con una búsqueda binaria sobre c.
+# Como es una estimación Monte Carlo, promediamos varias corridas en cada paso.
+# buscar_c = function(n_tareas, n_agentes, tolerancia=0.0005, repeticiones=40,
+#                     c_min=1e-4, c_max=500, max_iter=25){
+#   objetivo = 1/n_agentes
+#   if(objetivo <= 1/n_tareas || objetivo >= 1)
+#     stop("No existe 'c': 1/n_agentes tiene que estar entre 1/n_tareas y 1")
+
+#   estimar = function(c) mean(replicate(repeticiones, esp_maximos(c, n_tareas)))
+
+#   for(i in 1:max_iter){
+#     c_medio = sqrt(c_min*c_max)   # punto medio en escala logarítmica
+#     valor = estimar(c_medio)
+#     if(abs(valor-objetivo) < tolerancia) break
+#     if(valor > objetivo) c_min = c_medio else c_max = c_medio
+#   }
+#   c_medio
+# }
+
+# # Tabla de 'c' para cada tupla (agentes, tareas) que nos interesa.
+# tuplas = rbind(
+#   # exhaustivos
+#   data.frame(agentes=2, tareas=c(6, 9, 12, 15)),
+#   data.frame(agentes=3, tareas=c(6, 7, 8, 9)),
+#   data.frame(agentes=4, tareas=c(5, 6, 7, 8)),
+#   # no exhaustivos
+#   data.frame(agentes=2, tareas=c(20, 25, 30, 35)),
+#   data.frame(agentes=3, tareas=c(15, 20, 25, 30)),
+#   data.frame(agentes=4, tareas=c(10, 15, 20, 25))
+# )
+
+# tabla_c = transform(tuplas,
+#   c = mapply(function(a, t) buscar_c(t, a), agentes, tareas))
+# print(tabla_c, row.names=FALSE)
+
+
+# a = read.table("reparto_TAREAS_6_tareas_2_agen_nrep1i_1_nrep1f_2_ninst_3_lambda_100.txt", header = TRUE)
+# a$alfa_ef_mio
+
+
+cantidadTareas = 6
+cantidadAgentes = 2
+# Perfiles de tamaños ordenados: setparts ya genera los bloques sin orden, y las
+# perms de abajo les devuelven la identidad de agente, asi que con los perfiles
+# canonicos alcanza para recorrer los k^n repartos exactamente una vez.
+a = sum.comb(cantidadTareas, cantidadAgentes)
+
+a
+cat("-------------\n")
+
+a = a[!apply(a, 1, is.unsorted), , drop=FALSE]
+
+a
+cat("-------------\n")
+
+largo = dim(a)[1]
+largo
+cat("-------------\n")
+
+
+# unclass porque perms() devuelve un objeto "partition" y sobre esa clase
+# duplicated() compara elemento a elemento en vez de por columna.
+permut = unclass(perms(cantidadAgentes))
+
+permut
+cat("-------------\n")
+
